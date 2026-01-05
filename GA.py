@@ -5,13 +5,13 @@ import pandas as pd
 # ======================================
 # APP TITLE
 # ======================================
-st.title("🎬 Cinema Ticket Pricing Optimization using Genetic Algorithm")
+st.title("Cinema Ticket Pricing Optimization using Genetic Algorithm")
 
 # ======================================
 # UPLOAD DATASET
 # ======================================
 uploaded_file = st.file_uploader(
-    "Upload your CSV file (e.g., cinema_hall_ticket_sales.csv)",
+    "Upload your CSV file (e.g., cinema_ticket_sales.csv)",
     type=["csv"]
 )
 
@@ -20,17 +20,16 @@ if uploaded_file is None:
     st.stop()
 
 # ======================================
-# LOAD DATASET (ROBUST CSV PARSING)
+# LOAD DATASET (UTF-8, ROBUST PARSING)
 # ======================================
 try:
     df = pd.read_csv(
         uploaded_file,
-        encoding="latin1",
         sep=",",
         engine="python",
         on_bad_lines="skip"
     )
-    st.success("Dataset successfully loaded (bad rows skipped) ✅")
+    st.success("Dataset successfully loaded (invalid rows skipped)")
     st.write("Dataset Preview:")
     st.dataframe(df.head())
     st.write(f"Total rows loaded: {len(df)}")
@@ -47,7 +46,7 @@ price_col = st.selectbox("Select Ticket Price Column", df.columns)
 sold_col = st.selectbox("Select Tickets Sold Column", df.columns)
 
 if price_col == sold_col:
-    st.error("Price column and Tickets Sold column must be different.")
+    st.error("Price column and tickets sold column must be different.")
     st.stop()
 
 if not pd.api.types.is_numeric_dtype(df[price_col]) or not pd.api.types.is_numeric_dtype(df[sold_col]):
@@ -61,15 +60,15 @@ PRICE_MIN = float(df[price_col].min())
 PRICE_MAX = float(df[price_col].max())
 
 if PRICE_MIN >= PRICE_MAX:
-    st.error("Invalid price range in dataset.")
+    st.error("Invalid price range detected in the dataset.")
     st.stop()
 
 # ======================================
 # DEMAND ESTIMATION
 # ======================================
 def estimate_demand(price):
-    idx = (df[price_col] - price).abs().idxmin()
-    return df.loc[idx, sold_col]
+    closest_index = (df[price_col] - price).abs().idxmin()
+    return df.loc[closest_index, sold_col]
 
 # ======================================
 # FITNESS FUNCTION
@@ -78,12 +77,12 @@ def fitness(price):
     return price * estimate_demand(price)
 
 # ======================================
-# GA PARAMETERS
+# GENETIC ALGORITHM PARAMETERS
 # ======================================
 st.sidebar.header("Genetic Algorithm Parameters")
 
 POP_SIZE = st.sidebar.slider("Population Size", 20, 100, 50)
-GENERATIONS = st.sidebar.slider("Generations", 20, 200, 100)
+GENERATIONS = st.sidebar.slider("Number of Generations", 20, 200, 100)
 CROSSOVER_RATE = st.sidebar.slider("Crossover Rate", 0.0, 1.0, 0.8)
 MUTATION_RATE = st.sidebar.slider("Mutation Rate", 0.0, 1.0, 0.05)
 ELITISM_SIZE = st.sidebar.slider(
@@ -96,17 +95,17 @@ ELITISM_SIZE = st.sidebar.slider(
 # ======================================
 # GA FUNCTIONS
 # ======================================
-def init_population():
+def initialize_population():
     return [random.uniform(PRICE_MIN, PRICE_MAX) for _ in range(POP_SIZE)]
 
 def selection(population):
     tournament = random.sample(population, 3)
     return max(tournament, key=fitness)
 
-def crossover(p1, p2):
+def crossover(parent1, parent2):
     if random.random() < CROSSOVER_RATE:
-        return (p1 + p2) / 2
-    return p1
+        return (parent1 + parent2) / 2
+    return parent1
 
 def mutation(price):
     if random.random() < MUTATION_RATE:
@@ -116,24 +115,24 @@ def mutation(price):
 # ======================================
 # RUN GENETIC ALGORITHM
 # ======================================
-if st.button("🚀 Run Genetic Algorithm"):
-    population = init_population()
-    best_fitness_history = []
+if st.button("Run Genetic Algorithm"):
+    population = initialize_population()
+    best_revenue_history = []
     best_price_history = []
 
     progress_bar = st.progress(0)
     status_text = st.empty()
 
-    for gen in range(GENERATIONS):
+    for generation in range(GENERATIONS):
         population.sort(key=fitness, reverse=True)
 
         # Elitism
         new_population = population[:ELITISM_SIZE]
 
         while len(new_population) < POP_SIZE:
-            parent1 = selection(population)
-            parent2 = selection(population)
-            child = crossover(parent1, parent2)
+            p1 = selection(population)
+            p2 = selection(population)
+            child = crossover(p1, p2)
             child = mutation(child)
             new_population.append(child)
 
@@ -143,29 +142,29 @@ if st.button("🚀 Run Genetic Algorithm"):
         best_revenue = fitness(best_price)
 
         best_price_history.append(best_price)
-        best_fitness_history.append(best_revenue)
+        best_revenue_history.append(best_revenue)
 
-        progress_bar.progress((gen + 1) / GENERATIONS)
+        progress_bar.progress((generation + 1) / GENERATIONS)
 
-        if gen % 10 == 0:
+        if generation % 10 == 0:
             status_text.text(
-                f"Generation {gen} | Best Price RM {best_price:.2f} | Revenue RM {best_revenue:.2f}"
+                f"Generation {generation} | Best Price: RM {best_price:.2f} | Revenue: RM {best_revenue:.2f}"
             )
 
     # ======================================
-    # FINAL RESULT
+    # FINAL RESULTS
     # ======================================
-    st.subheader("📊 Final Optimization Result")
+    st.subheader("Final Optimization Results")
 
     st.metric("Optimal Ticket Price (RM)", f"{best_price:.2f}")
     st.metric("Estimated Tickets Sold", int(estimate_demand(best_price)))
     st.metric("Maximum Revenue (RM)", f"{best_revenue:.2f}")
 
     # ======================================
-    # VISUALIZATION (NO MATPLOTLIB)
+    # VISUALIZATION (STREAMLIT NATIVE)
     # ======================================
-    st.subheader("📈 Revenue Optimization Progress")
-    st.line_chart(best_fitness_history)
+    st.subheader("Revenue Optimization Over Generations")
+    st.line_chart(best_revenue_history)
 
-    st.subheader("💰 Ticket Price Evolution")
+    st.subheader("Ticket Price Evolution Over Generations")
     st.line_chart(best_price_history)
