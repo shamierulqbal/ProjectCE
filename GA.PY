@@ -2,7 +2,7 @@
 # 1. UPLOAD DATASET
 # ======================================
 from google.colab import files
-files.upload()   # Upload cinema_hall_ticket_sales (1).csv
+files.upload()   # Upload cinema_hall_ticket_sales.csv
 
 
 # ======================================
@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 # 3. LOAD DATASET (FIX ENCODING)
 # ======================================
 # GUNA encoding='latin1' (PALING SELAMAT)
-df = pd.read_csv("cinema_hall_ticket_sales (1).csv", encoding="latin1")
+df = pd.read_csv("cinema_hall_ticket_sales.csv", encoding="latin1")
 
 print("Dataset berjaya dibaca ✅")
 print(df.head())
