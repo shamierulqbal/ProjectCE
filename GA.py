@@ -20,13 +20,20 @@ if uploaded_file is None:
     st.stop()
 
 # ======================================
-# LOAD DATASET
+# LOAD DATASET (ROBUST CSV PARSING)
 # ======================================
 try:
-    df = pd.read_csv(uploaded_file, encoding="latin1")
-    st.success("Dataset successfully loaded ✅")
+    df = pd.read_csv(
+        uploaded_file,
+        encoding="latin1",
+        sep=",",
+        engine="python",
+        on_bad_lines="skip"
+    )
+    st.success("Dataset successfully loaded (bad rows skipped) ✅")
     st.write("Dataset Preview:")
     st.dataframe(df.head())
+    st.write(f"Total rows loaded: {len(df)}")
 except Exception as e:
     st.error(f"Error loading dataset: {e}")
     st.stop()
@@ -107,7 +114,7 @@ def mutation(price):
     return price
 
 # ======================================
-# RUN GA
+# RUN GENETIC ALGORITHM
 # ======================================
 if st.button("🚀 Run Genetic Algorithm"):
     population = init_population()
@@ -124,9 +131,9 @@ if st.button("🚀 Run Genetic Algorithm"):
         new_population = population[:ELITISM_SIZE]
 
         while len(new_population) < POP_SIZE:
-            p1 = selection(population)
-            p2 = selection(population)
-            child = crossover(p1, p2)
+            parent1 = selection(population)
+            parent2 = selection(population)
+            child = crossover(parent1, parent2)
             child = mutation(child)
             new_population.append(child)
 
@@ -155,7 +162,7 @@ if st.button("🚀 Run Genetic Algorithm"):
     st.metric("Maximum Revenue (RM)", f"{best_revenue:.2f}")
 
     # ======================================
-    # VISUALIZATION (STREAMLIT NATIVE)
+    # VISUALIZATION (NO MATPLOTLIB)
     # ======================================
     st.subheader("📈 Revenue Optimization Progress")
     st.line_chart(best_fitness_history)
