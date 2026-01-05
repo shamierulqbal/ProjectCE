@@ -8,7 +8,7 @@ import pandas as pd
 st.title("Cinema Ticket Pricing Optimization using Genetic Algorithm")
 
 # ======================================
-# UPLOAD DATASET
+# FILE UPLOAD
 # ======================================
 uploaded_file = st.file_uploader(
     "Upload your CSV file (e.g., cinema_ticket_sales.csv)",
@@ -20,16 +20,30 @@ if uploaded_file is None:
     st.stop()
 
 # ======================================
-# LOAD DATASET (UTF-8, ROBUST PARSING)
+# SAFE CSV LOADER (ENCODING FALLBACK)
 # ======================================
+def load_csv(file):
+    try:
+        # Try UTF-8 first
+        return pd.read_csv(
+            file,
+            sep=",",
+            engine="python",
+            on_bad_lines="skip"
+        )
+    except UnicodeDecodeError:
+        # Fallback for Excel / Windows CSV
+        return pd.read_csv(
+            file,
+            sep=",",
+            engine="python",
+            on_bad_lines="skip",
+            encoding="cp1252"
+        )
+
 try:
-    df = pd.read_csv(
-        uploaded_file,
-        sep=",",
-        engine="python",
-        on_bad_lines="skip"
-    )
-    st.success("Dataset successfully loaded (invalid rows skipped)")
+    df = load_csv(uploaded_file)
+    st.success("Dataset successfully loaded")
     st.write("Dataset Preview:")
     st.dataframe(df.head())
     st.write(f"Total rows loaded: {len(df)}")
