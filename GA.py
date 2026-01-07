@@ -3,32 +3,31 @@ import pandas as pd
 import random
 
 # -----------------------------
-# LOAD DATA
+# LOAD DATA VIA UPLOAD
 # -----------------------------
 @st.cache_data
-def load_data():
-    try:
-        # Attempt to load from local file
-        return pd.read_csv("cinema_ticket_pricing_clean.csv")
-        
-        # Optional: Load from URL if local file is unavailable (uncomment and replace URL)
-        # return pd.read_csv("https://raw.githubusercontent.com/your-repo/main/cinema_ticket_pricing_clean.csv")
-    except FileNotFoundError:
-        st.error("CSV file 'cinema_ticket_pricing_clean.csv' not found. Please ensure it's in the repository.")
-        return pd.DataFrame()  # Return empty DataFrame to prevent crashes
-    except Exception as e:
-        st.error(f"Error loading data: {str(e)}")
-        return pd.DataFrame()
-
-df = load_data()
-
-# Early exit if data loading failed
-if df.empty:
-    st.stop()
+def load_data(uploaded_file):
+    if uploaded_file is not None:
+        try:
+            return pd.read_csv(uploaded_file)
+        except Exception as e:
+            st.error(f"Error reading the uploaded CSV: {str(e)}")
+            return pd.DataFrame()
+    return pd.DataFrame()
 
 st.title("🎬 Optimizing Cinema Ticket Pricing using Genetic Algorithm")
 
-st.write("This application optimizes cinema ticket prices to maximize revenue using a Genetic Algorithm.")
+st.write("This application optimizes cinema ticket prices to maximize revenue using a Genetic Algorithm. Upload your ticket data CSV below.")
+
+# File uploader for ticket CSV
+uploaded_file = st.file_uploader("Upload your cinema ticket pricing CSV (e.g., cinema_ticket_pricing_clean.csv)", type=["csv"])
+
+df = load_data(uploaded_file)
+
+# Early exit if no data is uploaded or loaded
+if df.empty:
+    st.error("Please upload a valid CSV file to proceed.")
+    st.stop()
 
 # -----------------------------
 # USER PARAMETERS
