@@ -1,6 +1,5 @@
 import streamlit as st
 import numpy as np
-import matplotlib.pyplot as plt
 import random
 import pandas as pd
 from io import StringIO
@@ -125,42 +124,54 @@ if st.sidebar.button("Run Optimization"):
     
     st.success(f"Optimization Complete! Best Ticket Price: ${best_price:.2f} | Best Demand: {best_demand:.2f} | Best Revenue: ${best_revenue:.2f}")
 
-    # Wow factor: Interactive plot of fitness evolution
+    # Wow factor: Interactive plot of fitness evolution using Streamlit's built-in chart
     st.header("Fitness Evolution Plot")
-    fig, ax = plt.subplots()
-    ax.plot(range(generations), best_fitnesses, label="Best Revenue per Generation", color="blue")
-    ax.set_xlabel("Generation")
-    ax.set_ylabel("Revenue")
-    ax.set_title("Genetic Algorithm Optimization Progress")
-    ax.legend()
-    st.pyplot(fig)
-    
-    # Additional wow: 3D Surface plot of price-demand-revenue (for visualization)
-    st.header("Revenue Surface Plot (Wow Factor!)")
+    fitness_df = pd.DataFrame({
+        "Generation": range(generations),
+        "Best Revenue": best_fitnesses
+    })
+    st.line_chart(fitness_df.set_index("Generation"))
+
+    # Additional wow: 2D Plots for Revenue and Demand vs Price (replacing 3D for compatibility)
+    st.header("Revenue and Demand Curves (Wow Factor!)")
     prices = np.linspace(5, 30, 100)
     demands = [max(0, base_demand - sensitivity * p) for p in prices]
     revenues = [p * d for p, d in zip(prices, demands)]
     
-    fig_3d = plt.figure()
-    ax_3d = fig_3d.add_subplot(111, projection='3d')
-    ax_3d.plot(prices, demands, revenues, label="Fitted Revenue Curve", color="red")
-    ax_3d.scatter([best_price], [best_demand], [best_revenue], color="green", s=100, label="Optimal Point")
+    # Demand vs Price
+    demand_df = pd.DataFrame({
+        "Price": prices,
+        "Demand": demands
+    })
+    st.subheader("Demand vs Price")
+    st.line_chart(demand_df.set_index("Price"))
     
-    # If data uploaded, scatter historical points
+    # Revenue vs Price with optimal point
+    revenue_df = pd.DataFrame({
+        "Price": prices,
+        "Revenue": revenues
+    })
+    st.subheader("Revenue vs Price")
+    st.line_chart(revenue_df.set_index("Price"))
+    
+    # Highlight optimal point (note: Streamlit line_chart doesn't support direct markers, so describe it)
+    st.info(f"Optimal Point: Price ${best_price:.2f}, Revenue ${best_revenue:.2f}")
+
+    # If data uploaded, show historical points in a table or additional chart
     if data is not None and 'price' in data.columns and 'demand' in data.columns:
         hist_prices = data['price'].values
         hist_demands = data['demand'].values
         hist_revenues = hist_prices * hist_demands
-        ax_3d.scatter(hist_prices, hist_demands, hist_revenues, color="blue", s=50, label="Historical Data Points", alpha=0.6)
-    
-    ax_3d.set_xlabel("Price ($)")
-    ax_3d.set_ylabel("Demand")
-    ax_3d.set_zlabel("Revenue ($)")
-    ax_3d.set_title("3D Revenue Optimization Surface")
-    ax_3d.legend()
-    st.pyplot(fig_3d)
+        hist_df = pd.DataFrame({
+            "Price": hist_prices,
+            "Demand": hist_demands,
+            "Revenue": hist_revenues
+        })
+        st.subheader("Historical Data Points")
+        st.dataframe(hist_df)
 
 # Citation notes (based on relevant references for GA concepts and file upload)
 # Genetic Algorithm concepts inspired by tutorials and explanations from sources like MATLAB GA tutorials<sup>1</sup> and GeeksforGeeks comparisons<sup>10</sup>.
 # Streamlit integration for apps similar to movie recommendation examples<sup>4</sup><sup>5</sup><sup>7</sup>.
 # File upload functionality using st.file_uploader as per Streamlit documentation<sup>6</sup> and community examples<sup>5</sup><sup>8</sup><sup>14</sup><sup>15</sup>.
+# Built-in charting with st.line_chart for compatibility without external plotting libraries<sup>6</sup>.
