@@ -2,6 +2,7 @@ import streamlit as st
 import random
 import pandas as pd
 import numpy as np
+import io
 
 # ======================================
 # KONFIGURASI HALAMAN
@@ -23,40 +24,50 @@ MUTATION_RATE = st.sidebar.slider("Mutation Rate", 0.01, 0.5, 0.1)
 CROSSOVER_RATE = st.sidebar.slider("Crossover Rate", 0.5, 1.0, 0.8)
 
 # ======================================
-# 1. MUAT NAIK DATA & PEMPROSESAN
+# 1. MUAT NAIK DATA (ROBUST LOADING)
 # ======================================
 st.subheader("1. Muat Naik Data Jualan")
 uploaded_file = st.file_uploader("Upload CSV (Mesti ada kolum Harga & Unit Terjual)", type=["csv"])
 
 if uploaded_file:
-    # Safe Loading dengan Reset Pointer (Seek 0)
-    try:
-        df = pd.read_csv(uploaded_file, encoding='utf-8')
-    except Exception:
-        uploaded_file.seek(0)  # Kembali ke permulaan fail
+    df = None
+    # Senarai encoding untuk dicuba jika gagal
+    encodings = ['utf-8', 'cp1252', 'latin-1', 'utf-16']
+    
+    for enc in encodings:
         try:
-            df = pd.read_csv(uploaded_file, encoding='cp1252')
-        except Exception as e:
-            st.error(f"Gagal membaca fail: {e}")
-            st.stop()
+            uploaded_file.seek(0) # Reset setiap kali cubaan baru
+            df = pd.read_csv(uploaded_file, encoding=enc)
+            st.success(f"Data berjaya dibaca menggunakan format: {enc}")
+            break
+        except Exception:
+            continue
+
+    if df is None:
+        st.error("Gagal membaca fail. Sila pastikan fail CSV anda tidak rosak dan menggunakan format yang betul.")
+        st.stop()
 
     if df.empty:
         st.error("Fail CSV kosong!")
         st.stop()
-
-    st.success("Data berjaya dimuat naik!")
     
+    # Pilih Kolum
     col_a, col_b = st.columns(2)
     with col_a:
         price_col = st.selectbox("Pilih Kolum Harga (RM)", df.columns)
     with col_b:
         sold_col = st.selectbox("Pilih Kolum Unit Terjual", df.columns)
 
-    # Pastikan data bersih dan tersusun untuk interpolasi
+    # Pembersihan Data
     df = df.dropna(subset=[price_col, sold_col])
     df[price_col] = pd.to_numeric(df[price_col], errors='coerce')
     df[sold_col] = pd.to_numeric(df[sold_col], errors='coerce')
+    df = df.dropna() # Buang jika ada baris yang gagal jadi nombor
     df = df.sort_values(by=price_col).reset_index(drop=True)
+
+    if len(df) < 2:
+        st.warning("Data tidak mencukupi untuk melakukan interpolasi. Sila pastikan ada sekurang-kurangnya 2 titik data harga yang berbeza.")
+        st.stop()
 
     PRICE_MIN = float(df[price_col].min())
     PRICE_MAX = float(df[price_col].max())
@@ -65,30 +76,25 @@ if uploaded_file:
     # 2. LOGIK EVOLUTIONARY ALGORITHM
     # ======================================
     
-    # Fungsi Anggaran Permintaan menggunakan Linear Interpolation
     def get_demand(price):
-        # np.interp memerlukan x-coordinates (harga) yang tersusun
+        # Menggunakan linear interpolation untuk menganggar permintaan di antara titik data
         return np.interp(price, df[price_col], df[sold_col])
 
-    # Fitness Function: Revenue = Price * Demand
     def fitness(price):
+        # Objektif: Maksimumkan Revenue (Harga * Permintaan)
         return price * get_demand(price)
 
-    # Inisialisasi Populasi Rawak
     def create_individual():
         return random.uniform(PRICE_MIN, PRICE_MAX)
 
-    # Crossover (Arithmetic)
     def crossover(p1, p2):
         if random.random() < CROSSOVER_RATE:
             alpha = random.random()
             return (alpha * p1) + ((1 - alpha) * p2)
         return p1
 
-    # Mutation (Gaussian)
     def mutate(individual):
         if random.random() < MUTATION_RATE:
-            # Mutasi dalam range 10% daripada julat harga
             deviation = (PRICE_MAX - PRICE_MIN) * 0.1
             individual += random.gauss(0, deviation)
             individual = max(PRICE_MIN, min(PRICE_MAX, individual))
@@ -98,9 +104,7 @@ if uploaded_file:
     # 3. PROSES OPTIMASI
     # ======================================
     if st.button("🚀 Jalankan Optimasi"):
-        # Create Initial Population
         population = [create_individual() for _ in range(POP_SIZE)]
-        
         history_revenue = []
         history_best_price = []
 
@@ -108,19 +112,18 @@ if uploaded_file:
         status_text = st.empty()
 
         for gen in range(GENERATIONS):
-            # Sort mengikut fitness (terbaik di atas)
+            # Sort mengikut fitness (turun)
             population.sort(key=fitness, reverse=True)
             
-            # Elitism (Kekalkan 2 terbaik)
+            # Elitism
             new_population = population[:2]
 
             while len(new_population) < POP_SIZE:
-                # Selection (Tournament)
-                tournament = random.sample(population[:max(5, POP_SIZE//2)], 3)
+                # Tournament Selection
+                tournament = random.sample(population[:max(5, len(population)//2)], 3)
                 parent1 = max(tournament, key=fitness)
-                parent2 = selection_alt = random.choice(population[:10])
+                parent2 = random.choice(population[:10])
 
-                # Breeding
                 child = crossover(parent1, parent2)
                 child = mutate(child)
                 new_population.append(child)
@@ -151,15 +154,16 @@ if uploaded_file:
         col2.metric("Anggaran Unit Terjual", f"{int(final_demand)} unit")
         col3.metric("Maksimum Revenue", f"RM {final_revenue:.2f}")
 
-        # Visualisasi
         tab1, tab2 = st.tabs(["📈 Graf Prestasi", "📋 Data Perjalanan GA"])
         
         with tab1:
-            st.subheader("Peningkatan Revenue mengikut Generasi")
+            st.subheader("Evolusi Hasil vs Generasi")
             st.line_chart(history_revenue)
-            
-            st.subheader("Perubahan Harga mengikut Generasi")
+            st.caption("Menunjukkan peningkatan hasil (revenue) seiring dengan evolusi harga.")
+
+            st.subheader("Evolusi Harga vs Generasi")
             st.line_chart(history_best_price)
+            st.caption("Menunjukkan bagaimana algoritma 'mencari' harga yang paling stabil dan menguntungkan.")
 
         with tab2:
             df_history = pd.DataFrame({
@@ -171,12 +175,3 @@ if uploaded_file:
 
 else:
     st.info("Sila muat naik fail CSV untuk memulakan.")
-    # Preview format yang diperlukan
-    st.markdown("""
-    **Format CSV yang dicadangkan:**
-    | harga | unit_terjual |
-    |-------|--------------|
-    | 12.0  | 100          |
-    | 15.0  | 85           |
-    | 18.0  | 60           |
-    """)
