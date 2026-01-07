@@ -7,9 +7,24 @@ import random
 # -----------------------------
 @st.cache_data
 def load_data():
-    return pd.read_csv("cinema_ticket_pricing_clean.csv")
+    try:
+        # Attempt to load from local file
+        return pd.read_csv("cinema_ticket_pricing_clean.csv")
+        
+        # Optional: Load from URL if local file is unavailable (uncomment and replace URL)
+        # return pd.read_csv("https://raw.githubusercontent.com/your-repo/main/cinema_ticket_pricing_clean.csv")
+    except FileNotFoundError:
+        st.error("CSV file 'cinema_ticket_pricing_clean.csv' not found. Please ensure it's in the repository.")
+        return pd.DataFrame()  # Return empty DataFrame to prevent crashes
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        return pd.DataFrame()
 
 df = load_data()
+
+# Early exit if data loading failed
+if df.empty:
+    st.stop()
 
 st.title("🎬 Optimizing Cinema Ticket Pricing using Genetic Algorithm")
 
