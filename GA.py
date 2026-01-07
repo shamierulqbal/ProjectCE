@@ -35,17 +35,27 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
+    try:
+        if uploaded_file.name.endswith(".csv"):
+            try:
+                df = pd.read_csv(uploaded_file, encoding="utf-8")
+            except UnicodeDecodeError:
+                df = pd.read_csv(uploaded_file, encoding="latin1")
+        else:
+            df = pd.read_excel(uploaded_file)
 
-    # Validate dataset
-    if "price" not in df.columns or "demand" not in df.columns:
-        st.error("Dataset must contain 'price' and 'demand' columns.")
+    except Exception as e:
+        st.error("❌ Failed to read file. Please upload a valid CSV or Excel file.")
         st.stop()
 
-    st.success("Dataset uploaded successfully!")
+    # Validate dataset
+    df.columns = df.columns.str.lower().str.strip()
+
+    if "price" not in df.columns or "demand" not in df.columns:
+        st.error("Dataset must contain columns named 'price' and 'demand'.")
+        st.stop()
+
+    st.success("✅ Dataset uploaded successfully!")
     st.dataframe(df)
 
     # ----------------------------------
