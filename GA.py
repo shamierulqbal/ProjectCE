@@ -25,7 +25,7 @@ st.write(
 )
 
 # ----------------------------------
-# Dataset Upload
+# Dataset Upload (FINAL FIX)
 # ----------------------------------
 st.subheader("📤 Upload Price–Demand Dataset")
 
@@ -35,27 +35,58 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
+    df = None
+
     try:
-        if uploaded_file.name.endswith(".csv"):
-            try:
-                df = pd.read_csv(uploaded_file, encoding="utf-8")
-            except UnicodeDecodeError:
-                df = pd.read_csv(uploaded_file, encoding="latin1")
-        else:
+        # Try Excel first
+        if uploaded_file.name.lower().endswith(".xlsx"):
             df = pd.read_excel(uploaded_file)
 
+        # Try CSV with multiple encodings & separators
+        else:
+            try:
+                df = pd.read_csv(uploaded_file, encoding="utf-8")
+            except:
+                try:
+                    df = pd.read_csv(uploaded_file, encoding="latin1")
+                except:
+                    df = pd.read_csv(uploaded_file, sep=";", encoding="latin1")
+
     except Exception as e:
-        st.error("❌ Failed to read file. Please upload a valid CSV or Excel file.")
+        st.error("❌ Unable to read file. Please check file format.")
         st.stop()
 
-    # Validate dataset
+    # Normalize column names
     df.columns = df.columns.str.lower().str.strip()
 
-    if "price" not in df.columns or "demand" not in df.columns:
-        st.error("Dataset must contain columns named 'price' and 'demand'.")
+    # Try to auto-detect columns
+    price_col = None
+    demand_col = None
+
+    for col in df.columns:
+        if "price" in col:
+            price_col = col
+        if "demand" in col:
+            demand_col = col
+
+    if price_col is None or demand_col is None:
+        st.error(
+            "❌ Could not detect 'price' and 'demand' columns.\n\n"
+            "Please ensure your dataset contains columns like:\n"
+            "`price`, `ticket_price`, `demand`, `customers`"
+        )
         st.stop()
 
-    st.success("✅ Dataset uploaded successfully!")
+    # Keep only needed columns
+    df = df[[price_col, demand_col]]
+    df.columns = ["price", "demand"]
+
+    # Convert to numeric
+    df["price"] = pd.to_numeric(df["price"], errors="coerce")
+    df["demand"] = pd.to_numeric(df["demand"], errors="coerce")
+    df = df.dropna()
+
+    st.success("✅ Dataset loaded successfully!")
     st.dataframe(df)
 
     # ----------------------------------
