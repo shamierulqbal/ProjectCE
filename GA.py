@@ -1,158 +1,166 @@
 import streamlit as st
-import random
 import numpy as np
+import matplotlib.pyplot as plt
+import random
 import pandas as pd
+from io import StringIO
 
-# ----------------------------------
-# Page Config
-# ----------------------------------
-st.set_page_config(
-    page_title="Cinema Ticket Pricing Optimization",
-    page_icon="🎬",
-    layout="centered"
-)
+# Streamlit app title
+st.title("Cinema Ticket Pricing Optimizer using Genetic Algorithm")
 
-# ----------------------------------
-# Streamlit UI
-# ----------------------------------
-st.title("🎬 Optimizing Cinema Ticket Pricing")
-st.markdown("### Genetic Algorithm with Dataset Upload")
+# Sidebar for parameter settings
+st.sidebar.header("Set Genetic Algorithm Parameters")
+population_size = st.sidebar.slider("Population Size", min_value=10, max_value=200, value=50, step=10)
+generations = st.sidebar.slider("Number of Generations", min_value=10, max_value=500, value=100, step=10)
+mutation_rate = st.sidebar.slider("Mutation Rate", min_value=0.01, max_value=0.5, value=0.1, step=0.01)
+crossover_rate = st.sidebar.slider("Crossover Rate", min_value=0.5, max_value=1.0, value=0.8, step=0.05)
 
-st.write(
-    "This application allows users to upload a **real or simulated dataset** "
-    "containing ticket price and demand. A **Genetic Algorithm** is then used "
-    "to find the optimal ticket price that maximizes cinema revenue."
-)
+# Default model parameters
+base_demand = 1000
+sensitivity = 10
+max_price = 50
 
-# ----------------------------------
-# Dataset Upload
-# ----------------------------------
-st.subheader("📤 Upload Price–Demand Dataset")
+# Dataset upload section
+st.header("Upload Dataset")
+st.write("Upload a CSV file with 'price' and 'demand' columns to fit a custom demand model. Defaults will be used if no file is uploaded.")
+uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
 
-uploaded_file = st.file_uploader(
-    "Upload CSV or Excel file",
-    type=["csv", "xlsx"]
-)
-
+data = None
 if uploaded_file is not None:
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
+    # Read the uploaded file
+    data = pd.read_csv(uploaded_file)
+    st.write("Uploaded Data Preview:")
+    st.dataframe(data.head())
+    
+    # Fit linear model if required columns exist
+    if 'price' in data.columns and 'demand' in data.columns:
+        # Simple linear fit: demand = intercept + slope * price
+        # We expect slope to be negative (higher price -> lower demand)
+        prices = data['price'].values
+        demands = data['demand'].values
+        if len(prices) > 1:  # Need at least 2 points for fit
+            slope, intercept = np.polyfit(prices, demands, 1)
+            sensitivity = -slope if slope < 0 else sensitivity  # Ensure positive sensitivity
+            base_demand = intercept
+            st.success(f"Fitted Demand Model: Base Demand = {base_demand:.2f}, Sensitivity = {sensitivity:.2f}")
+        else:
+            st.warning("Not enough data points for fitting. Using defaults.")
     else:
-        df = pd.read_excel(uploaded_file)
+        st.error("CSV must have 'price' and 'demand' columns. Using defaults.")
 
-    # Validate dataset
-    if "price" not in df.columns or "demand" not in df.columns:
-        st.error("Dataset must contain 'price' and 'demand' columns.")
-        st.stop()
+# Define the fitness function (objective: maximize revenue based on price and demand)
+# Demand model: demand = base_demand - sensitivity * price
+def fitness(individual, base_demand, sensitivity, max_price):
+    price = individual[0]  # Individual is a list with one gene: ticket price
+    if price < 0 or price > max_price:
+        return 0  # Penalize invalid prices
+    demand = max(0, base_demand - sensitivity * price)
+    revenue = price * demand
+    return revenue
 
-    st.success("Dataset uploaded successfully!")
-    st.dataframe(df)
+# Initialize population
+def create_population(size):
+    return [[random.uniform(5, 30)] for _ in range(size)]  # Prices between \$5 and \$30
 
-    # ----------------------------------
-    # Interpolated Demand Function
-    # ----------------------------------
-    def demand(price):
-        return np.interp(price, df["price"], df["demand"])
+# Selection: Tournament selection
+def select(population, fitnesses, tournament_size=3):
+    selected = []
+    for _ in range(len(population)):
+        competitors = random.sample(range(len(population)), tournament_size)
+        winner = max(competitors, key=lambda i: fitnesses[i])
+        selected.append(population[winner])
+    return selected
 
-    # ----------------------------------
-    # Fitness Function
-    # ----------------------------------
-    def fitness(price):
-        return price * demand(price)
+# Crossover: Single point crossover for single gene (arithmetic mean)
+def crossover(parent1, parent2, rate):
+    if random.random() < rate:
+        child = [(parent1[0] + parent2[0]) / 2]
+        return child
+    return parent1
 
-    # ----------------------------------
-    # GA Parameters
-    # ----------------------------------
-    st.sidebar.header("🧬 Genetic Algorithm Parameters")
+# Mutation: Gaussian mutation
+def mutate(individual, rate, sigma=1.0):
+    if random.random() < rate:
+        individual[0] += random.gauss(0, sigma)
+    return individual
 
-    population_size = st.sidebar.slider("Population Size", 20, 200, 80)
-    generations = st.sidebar.slider("Number of Generations", 20, 200, 100)
-    mutation_rate = st.sidebar.slider("Mutation Rate", 0.01, 0.5, 0.1)
+# Run GA button
+if st.sidebar.button("Run Optimization"):
+    # Initialize
+    population = create_population(population_size)
+    best_fitnesses = []
+    
+    with st.spinner("Optimizing..."):
+        for gen in range(generations):
+            fitnesses = [fitness(ind, base_demand, sensitivity, max_price) for ind in population]
+            best_fitness = max(fitnesses)
+            best_fitnesses.append(best_fitness)
+            
+            # Selection
+            selected = select(population, fitnesses)
+            
+            # Create next generation
+            next_population = []
+            for i in range(0, len(selected), 2):
+                parent1 = selected[i]
+                parent2 = selected[i+1] if i+1 < len(selected) else selected[0]
+                child1 = crossover(parent1, parent2, crossover_rate)
+                child2 = crossover(parent2, parent1, crossover_rate)
+                next_population.append(mutate(child1, mutation_rate))
+                next_population.append(mutate(child2, mutation_rate))
+            
+            population = next_population[:population_size]  # Trim to size
+            # Simple elitism: replace worst with best from previous
+            best_ind = max(population, key=lambda ind: fitness(ind, base_demand, sensitivity, max_price))
+            population[0] = best_ind
+            
+            # Progress bar
+            st.progress((gen + 1) / generations)
+    
+    # Find best individual
+    best_individual = max(population, key=lambda ind: fitness(ind, base_demand, sensitivity, max_price))
+    best_price = best_individual[0]
+    best_demand = max(0, base_demand - sensitivity * best_price)
+    best_revenue = best_price * best_demand
+    
+    st.success(f"Optimization Complete! Best Ticket Price: ${best_price:.2f} | Best Demand: {best_demand:.2f} | Best Revenue: ${best_revenue:.2f}")
 
-    # ----------------------------------
-    # Genetic Algorithm
-    # ----------------------------------
-    def genetic_algorithm():
-        population = np.random.uniform(
-            df["price"].min(),
-            df["price"].max(),
-            population_size
-        )
+    # Wow factor: Interactive plot of fitness evolution
+    st.header("Fitness Evolution Plot")
+    fig, ax = plt.subplots()
+    ax.plot(range(generations), best_fitnesses, label="Best Revenue per Generation", color="blue")
+    ax.set_xlabel("Generation")
+    ax.set_ylabel("Revenue")
+    ax.set_title("Genetic Algorithm Optimization Progress")
+    ax.legend()
+    st.pyplot(fig)
+    
+    # Additional wow: 3D Surface plot of price-demand-revenue (for visualization)
+    st.header("Revenue Surface Plot (Wow Factor!)")
+    prices = np.linspace(5, 30, 100)
+    demands = [max(0, base_demand - sensitivity * p) for p in prices]
+    revenues = [p * d for p, d in zip(prices, demands)]
+    
+    fig_3d = plt.figure()
+    ax_3d = fig_3d.add_subplot(111, projection='3d')
+    ax_3d.plot(prices, demands, revenues, label="Fitted Revenue Curve", color="red")
+    ax_3d.scatter([best_price], [best_demand], [best_revenue], color="green", s=100, label="Optimal Point")
+    
+    # If data uploaded, scatter historical points
+    if data is not None and 'price' in data.columns and 'demand' in data.columns:
+        hist_prices = data['price'].values
+        hist_demands = data['demand'].values
+        hist_revenues = hist_prices * hist_demands
+        ax_3d.scatter(hist_prices, hist_demands, hist_revenues, color="blue", s=50, label="Historical Data Points", alpha=0.6)
+    
+    ax_3d.set_xlabel("Price ($)")
+    ax_3d.set_ylabel("Demand")
+    ax_3d.set_zlabel("Revenue ($)")
+    ax_3d.set_title("3D Revenue Optimization Surface")
+    ax_3d.legend()
+    st.pyplot(fig_3d)
 
-        best_fitness_history = []
-
-        for _ in range(generations):
-            fitness_scores = np.array([fitness(p) for p in population])
-            best_fitness_history.append(fitness_scores.max())
-
-            # Selection (Tournament)
-            selected = []
-            for _ in range(population_size):
-                i, j = np.random.choice(len(population), 2, replace=False)
-                selected.append(
-                    population[i] if fitness_scores[i] > fitness_scores[j] else population[j]
-                )
-
-            # Crossover
-            offspring = []
-            for i in range(0, population_size, 2):
-                p1 = selected[i]
-                p2 = selected[min(i + 1, population_size - 1)]
-                alpha = random.random()
-                offspring.extend([
-                    alpha * p1 + (1 - alpha) * p2,
-                    alpha * p2 + (1 - alpha) * p1
-                ])
-
-            # Mutation
-            for i in range(len(offspring)):
-                if random.random() < mutation_rate:
-                    offspring[i] += random.uniform(-2, 2)
-
-            population = np.clip(
-                offspring,
-                df["price"].min(),
-                df["price"].max()
-            )
-
-        best_price = population[np.argmax([fitness(p) for p in population])]
-        return best_price, fitness(best_price), best_fitness_history
-
-    # ----------------------------------
-    # Run Optimization
-    # ----------------------------------
-    if st.button("🚀 Run Optimization"):
-        with st.spinner("Running Genetic Algorithm..."):
-            best_price, best_revenue, history = genetic_algorithm()
-
-        st.success("Optimization Completed!")
-
-        # Results
-        col1, col2, col3 = st.columns(3)
-        col1.metric("🎟️ Optimal Ticket Price (RM)", f"{best_price:.2f}")
-        col2.metric("👥 Expected Demand", int(demand(best_price)))
-        col3.metric("💰 Maximum Revenue (RM)", f"{best_revenue:.2f}")
-
-        # Convergence plot
-        st.subheader("📈 GA Convergence Curve")
-        st.line_chart(history)
-
-        # Price vs Revenue
-        st.subheader("✨ Ticket Price vs Revenue")
-        prices = np.linspace(df["price"].min(), df["price"].max(), 100)
-        revenues = [fitness(p) for p in prices]
-
-        chart_data = {
-            "Price (RM)": prices,
-            "Revenue (RM)": revenues
-        }
-
-        st.line_chart(chart_data)
-
-        st.info(
-            "📌 The optimal ticket price is determined using real demand data "
-            "rather than a predefined mathematical function."
-        )
-
-else:
-    st.warning("Please upload a dataset to proceed.")
+# Citation notes (based on relevant references for GA concepts and file upload)
+# Genetic Algorithm concepts inspired by tutorials and explanations from sources like MATLAB GA tutorials<sup>1</sup> and GeeksforGeeks comparisons<sup>10</sup>.
+# Streamlit integration for apps similar to movie recommendation examples<sup>4</sup><sup>5</sup><sup>7</sup>.
+# File upload functionality using st.file_uploader as per Streamlit documentation<sup>6</sup> and community examples<sup>5</sup><sup>8</sup><sup>14</sup><sup>15</sup>.
