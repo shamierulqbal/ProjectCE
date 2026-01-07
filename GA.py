@@ -1,177 +1,102 @@
 import streamlit as st
 import random
-import pandas as pd
+import matplotlib.pyplot as plt
 import numpy as np
-import io
 
-# ======================================
-# KONFIGURASI HALAMAN
-# ======================================
-st.set_page_config(page_title="Cinema Price Optimizer", layout="wide")
+# -------------------------------
+# Demand Function (Realistic)
+# -------------------------------
+def demand(price):
+    base_demand = 300
+    sensitivity = 8
+    return max(0, base_demand - sensitivity * price)
 
-st.title("🎬 Cinema Ticket Pricing Optimization")
-st.markdown("""
-Aplikasi ini menggunakan **Genetic Algorithm (GA)** untuk mencari harga tiket yang optimum bagi memaksimumkan hasil (revenue).
-""")
+# -------------------------------
+# Fitness Function
+# -------------------------------
+def fitness(price):
+    return price * demand(price)
 
-# ======================================
-# SIDEBAR - PARAMETER GA
-# ======================================
-st.sidebar.header("⚙️ Parameter Genetic Algorithm")
-POP_SIZE = st.sidebar.slider("Population Size", 10, 200, 50)
-GENERATIONS = st.sidebar.slider("Generations", 10, 300, 100)
-MUTATION_RATE = st.sidebar.slider("Mutation Rate", 0.01, 0.5, 0.1)
-CROSSOVER_RATE = st.sidebar.slider("Crossover Rate", 0.5, 1.0, 0.8)
+# -------------------------------
+# Genetic Algorithm
+# -------------------------------
+def genetic_algorithm(pop_size, generations, mutation_rate):
+    population = [random.uniform(5, 30) for _ in range(pop_size)]
+    best_fitness_history = []
 
-# ======================================
-# 1. MUAT NAIK DATA (ROBUST LOADING)
-# ======================================
-st.subheader("1. Muat Naik Data Jualan")
-uploaded_file = st.file_uploader("Upload CSV (Mesti ada kolum Harga & Unit Terjual)", type=["csv"])
+    for _ in range(generations):
+        fitness_scores = [fitness(p) for p in population]
 
-if uploaded_file:
-    df = None
-    # Senarai encoding untuk dicuba jika gagal
-    encodings = ['utf-8', 'cp1252', 'latin-1', 'utf-16']
-    
-    for enc in encodings:
-        try:
-            uploaded_file.seek(0) # Reset setiap kali cubaan baru
-            df = pd.read_csv(uploaded_file, encoding=enc)
-            st.success(f"Data berjaya dibaca menggunakan format: {enc}")
-            break
-        except Exception:
-            continue
+        # Save best fitness
+        best_fitness_history.append(max(fitness_scores))
 
-    if df is None:
-        st.error("Gagal membaca fail. Sila pastikan fail CSV anda tidak rosak dan menggunakan format yang betul.")
-        st.stop()
+        # Selection (Tournament)
+        selected = []
+        for _ in range(pop_size):
+            i, j = random.sample(range(pop_size), 2)
+            selected.append(population[i] if fitness(population[i]) > fitness(population[j]) else population[j])
 
-    if df.empty:
-        st.error("Fail CSV kosong!")
-        st.stop()
-    
-    # Pilih Kolum
-    col_a, col_b = st.columns(2)
-    with col_a:
-        price_col = st.selectbox("Pilih Kolum Harga (RM)", df.columns)
-    with col_b:
-        sold_col = st.selectbox("Pilih Kolum Unit Terjual", df.columns)
-
-    # Pembersihan Data
-    df = df.dropna(subset=[price_col, sold_col])
-    df[price_col] = pd.to_numeric(df[price_col], errors='coerce')
-    df[sold_col] = pd.to_numeric(df[sold_col], errors='coerce')
-    df = df.dropna() # Buang jika ada baris yang gagal jadi nombor
-    df = df.sort_values(by=price_col).reset_index(drop=True)
-
-    if len(df) < 2:
-        st.warning("Data tidak mencukupi untuk melakukan interpolasi. Sila pastikan ada sekurang-kurangnya 2 titik data harga yang berbeza.")
-        st.stop()
-
-    PRICE_MIN = float(df[price_col].min())
-    PRICE_MAX = float(df[price_col].max())
-
-    # ======================================
-    # 2. LOGIK EVOLUTIONARY ALGORITHM
-    # ======================================
-    
-    def get_demand(price):
-        # Menggunakan linear interpolation untuk menganggar permintaan di antara titik data
-        return np.interp(price, df[price_col], df[sold_col])
-
-    def fitness(price):
-        # Objektif: Maksimumkan Revenue (Harga * Permintaan)
-        return price * get_demand(price)
-
-    def create_individual():
-        return random.uniform(PRICE_MIN, PRICE_MAX)
-
-    def crossover(p1, p2):
-        if random.random() < CROSSOVER_RATE:
+        # Crossover
+        offspring = []
+        for i in range(0, pop_size, 2):
+            p1, p2 = selected[i], selected[min(i+1, pop_size-1)]
             alpha = random.random()
-            return (alpha * p1) + ((1 - alpha) * p2)
-        return p1
+            child1 = alpha * p1 + (1 - alpha) * p2
+            child2 = alpha * p2 + (1 - alpha) * p1
+            offspring.extend([child1, child2])
 
-    def mutate(individual):
-        if random.random() < MUTATION_RATE:
-            deviation = (PRICE_MAX - PRICE_MIN) * 0.1
-            individual += random.gauss(0, deviation)
-            individual = max(PRICE_MIN, min(PRICE_MAX, individual))
-        return individual
+        # Mutation
+        for i in range(len(offspring)):
+            if random.random() < mutation_rate:
+                offspring[i] += random.uniform(-2, 2)
 
-    # ======================================
-    # 3. PROSES OPTIMASI
-    # ======================================
-    if st.button("🚀 Jalankan Optimasi"):
-        population = [create_individual() for _ in range(POP_SIZE)]
-        history_revenue = []
-        history_best_price = []
+        population = np.clip(offspring, 5, 30)
 
-        progress_bar = st.progress(0)
-        status_text = st.empty()
+    best_price = max(population, key=fitness)
+    return best_price, fitness(best_price), best_fitness_history
 
-        for gen in range(GENERATIONS):
-            # Sort mengikut fitness (turun)
-            population.sort(key=fitness, reverse=True)
-            
-            # Elitism
-            new_population = population[:2]
+# -------------------------------
+# Streamlit UI
+# -------------------------------
+st.title("🎬 Optimizing Cinema Ticket Pricing using Genetic Algorithm")
+st.markdown("Adjust GA parameters and find the **optimal ticket price** that maximizes revenue.")
 
-            while len(new_population) < POP_SIZE:
-                # Tournament Selection
-                tournament = random.sample(population[:max(5, len(population)//2)], 3)
-                parent1 = max(tournament, key=fitness)
-                parent2 = random.choice(population[:10])
+# Sidebar controls
+st.sidebar.header("🧬 GA Parameters")
+pop_size = st.sidebar.slider("Population Size", 20, 200, 80)
+generations = st.sidebar.slider("Generations", 20, 200, 100)
+mutation_rate = st.sidebar.slider("Mutation Rate", 0.01, 0.5, 0.1)
 
-                child = crossover(parent1, parent2)
-                child = mutate(child)
-                new_population.append(child)
+# Run button
+if st.button("🚀 Run Optimization"):
+    best_price, best_revenue, history = genetic_algorithm(pop_size, generations, mutation_rate)
 
-            population = new_population
-            best_ind = population[0]
-            
-            history_revenue.append(fitness(best_ind))
-            history_best_price.append(best_ind)
-            
-            progress_bar.progress((gen + 1) / GENERATIONS)
-            if gen % 10 == 0:
-                status_text.text(f"Generasi {gen}: Harga Terbaik RM{best_ind:.2f}")
+    st.success("Optimization Completed!")
 
-        # Keputusan Akhir
-        best_price = population[0]
-        final_revenue = fitness(best_price)
-        final_demand = get_demand(best_price)
+    # Display results
+    col1, col2, col3 = st.columns(3)
+    col1.metric("🎟️ Best Ticket Price (RM)", f"{best_price:.2f}")
+    col2.metric("👥 Expected Demand", int(demand(best_price)))
+    col3.metric("💰 Maximum Revenue (RM)", f"{best_revenue:.2f}")
 
-        # ======================================
-        # 4. PAPARAN HASIL
-        # ======================================
-        st.divider()
-        st.balloons()
-        
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Harga Tiket Optimum", f"RM {best_price:.2f}")
-        col2.metric("Anggaran Unit Terjual", f"{int(final_demand)} unit")
-        col3.metric("Maksimum Revenue", f"RM {final_revenue:.2f}")
+    # Fitness convergence plot
+    st.subheader("📈 Fitness Convergence")
+    fig, ax = plt.subplots()
+    ax.plot(history)
+    ax.set_xlabel("Generation")
+    ax.set_ylabel("Best Revenue")
+    ax.set_title("GA Convergence Curve")
+    st.pyplot(fig)
 
-        tab1, tab2 = st.tabs(["📈 Graf Prestasi", "📋 Data Perjalanan GA"])
-        
-        with tab1:
-            st.subheader("Evolusi Hasil vs Generasi")
-            st.line_chart(history_revenue)
-            st.caption("Menunjukkan peningkatan hasil (revenue) seiring dengan evolusi harga.")
+    # Wow factor: Price vs Revenue Curve
+    st.subheader("✨ Price vs Revenue Curve")
+    prices = np.linspace(5, 30, 100)
+    revenues = [fitness(p) for p in prices]
 
-            st.subheader("Evolusi Harga vs Generasi")
-            st.line_chart(history_best_price)
-            st.caption("Menunjukkan bagaimana algoritma 'mencari' harga yang paling stabil dan menguntungkan.")
-
-        with tab2:
-            df_history = pd.DataFrame({
-                "Generasi": range(1, GENERATIONS + 1),
-                "Harga (RM)": history_best_price,
-                "Revenue (RM)": history_revenue
-            })
-            st.dataframe(df_history, use_container_width=True)
-
-else:
-    st.info("Sila muat naik fail CSV untuk memulakan.")
+    fig2, ax2 = plt.subplots()
+    ax2.plot(prices, revenues)
+    ax2.axvline(best_price, linestyle="--")
+    ax2.set_xlabel("Ticket Price (RM)")
+    ax2.set_ylabel("Revenue (RM)")
+    ax2.set_title("Revenue Landscape")
+    st.pyplot(fig2)
