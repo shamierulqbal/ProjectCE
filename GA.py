@@ -2,10 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import random
-import matplotlib.pyplot as plt
 
 # ======================================================
-# APP CONFIG
+# PAGE CONFIG
 # ======================================================
 st.set_page_config(
     page_title="Cinema Ticket Pricing Optimization (GA)",
@@ -14,7 +13,7 @@ st.set_page_config(
 )
 
 st.title("🎬 Optimizing Cinema Ticket Pricing Using Genetic Algorithm")
-st.markdown("This application finds the **optimal ticket price** that maximizes **revenue** using a **Genetic Algorithm**.")
+st.write("This app finds the **optimal cinema ticket price** that maximizes **revenue** using a Genetic Algorithm.")
 
 # ======================================================
 # FILE UPLOAD
@@ -44,15 +43,15 @@ st.dataframe(df.head())
 # ======================================================
 # COLUMN SELECTION
 # ======================================================
-st.subheader("📌 Select Relevant Columns")
+st.subheader("📌 Select Columns")
 
-cols = df.columns.tolist()
+columns = df.columns.tolist()
 
-price_col = st.selectbox("Select Ticket Price Column", cols)
-sold_col = st.selectbox("Select Tickets Sold Column", cols)
+price_col = st.selectbox("Ticket Price Column", columns)
+sold_col = st.selectbox("Tickets Sold Column", columns)
 
 if price_col == sold_col:
-    st.error("Price column and Tickets Sold column must be different.")
+    st.error("Price and Tickets Sold columns must be different.")
     st.stop()
 
 if not pd.api.types.is_numeric_dtype(df[price_col]) or not pd.api.types.is_numeric_dtype(df[sold_col]):
@@ -64,10 +63,6 @@ if not pd.api.types.is_numeric_dtype(df[price_col]) or not pd.api.types.is_numer
 # ======================================================
 PRICE_MIN = float(df[price_col].min())
 PRICE_MAX = float(df[price_col].max())
-
-if PRICE_MIN >= PRICE_MAX:
-    st.error("Invalid price range in dataset.")
-    st.stop()
 
 # ======================================================
 # DEMAND ESTIMATION
@@ -83,12 +78,12 @@ def fitness(price):
     return price * estimate_demand(price)
 
 # ======================================================
-# SIDEBAR – GA PARAMETERS
+# GA PARAMETERS
 # ======================================================
-st.sidebar.header("⚙️ Genetic Algorithm Settings")
+st.sidebar.header("⚙️ GA Parameters")
 
 POP_SIZE = st.sidebar.slider("Population Size", 20, 200, 60)
-GENERATIONS = st.sidebar.slider("Generations", 50, 500, 150)
+GENERATIONS = st.sidebar.slider("Generations", 50, 300, 150)
 CROSSOVER_RATE = st.sidebar.slider("Crossover Rate", 0.0, 1.0, 0.8)
 MUTATION_RATE = st.sidebar.slider("Mutation Rate", 0.0, 1.0, 0.05)
 ELITISM_SIZE = st.sidebar.slider("Elitism Size", 1, 5, 2)
@@ -148,7 +143,7 @@ if st.button("🚀 Run Genetic Algorithm"):
         progress.progress((gen + 1) / GENERATIONS)
         if gen % 10 == 0:
             status.text(
-                f"Generation {gen} | Best Price: RM {best_price:.2f} | Revenue: RM {best_rev:.2f}"
+                f"Generation {gen} | Price RM {best_price:.2f} | Revenue RM {best_rev:.2f}"
             )
 
     # ======================================================
@@ -162,22 +157,15 @@ if st.button("🚀 Run Genetic Algorithm"):
     col3.metric("Maximum Revenue", f"RM {best_rev:.2f}")
 
     # ======================================================
-    # VISUALIZATION
+    # VISUALIZATION (STREAMLIT BUILT-IN)
     # ======================================================
     st.subheader("📈 Optimization Progress")
 
-    fig1, ax1 = plt.subplots()
-    ax1.plot(best_revenues)
-    ax1.set_xlabel("Generation")
-    ax1.set_ylabel("Revenue (RM)")
-    ax1.set_title("Revenue Optimization")
-    st.pyplot(fig1)
+    chart_df = pd.DataFrame({
+        "Best Revenue (RM)": best_revenues,
+        "Ticket Price (RM)": best_prices
+    })
 
-    fig2, ax2 = plt.subplots()
-    ax2.plot(best_prices)
-    ax2.set_xlabel("Generation")
-    ax2.set_ylabel("Ticket Price (RM)")
-    ax2.set_title("Ticket Price Evolution")
-    st.pyplot(fig2)
+    st.line_chart(chart_df)
 
-    st.success("🎉 Optimization completed successfully!")
+    st.success("🎉 Genetic Algorithm optimization completed!")
