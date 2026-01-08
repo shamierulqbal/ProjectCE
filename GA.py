@@ -41,21 +41,35 @@ st.success("Dataset loaded successfully ✅")
 st.dataframe(df)
 
 # ======================================================
-# COLUMN SELECTION
+# COLUMN SELECTION (AUTO DETECT)
 # ======================================================
-st.subheader("📌 Select Columns")
+st.subheader("📌 Ticket & Demand Columns (Auto Detected)")
 
-columns = df.columns.tolist()
-price_col = st.selectbox("Ticket Price Column", columns)
-sold_col = st.selectbox("Tickets Sold Column", columns)
+price_keywords = ["price", "ticket"]
+demand_keywords = ["person", "sold", "demand", "quantity"]
 
-if price_col == sold_col:
-    st.error("Columns must be different.")
+def find_column(keywords):
+    for col in df.columns:
+        col_lower = col.lower()
+        if any(k in col_lower for k in keywords):
+            return col
+    return None
+
+price_col = find_column(price_keywords)
+sold_col = find_column(demand_keywords)
+
+if price_col is None or sold_col is None:
+    st.error("❌ Cannot detect ticket price or number of persons column.")
     st.stop()
 
+st.success(f"🎫 Ticket Price Column: **{price_col}**")
+st.success(f"👥 Number of Person Column: **{sold_col}**")
+
+# Validate numeric
 if not pd.api.types.is_numeric_dtype(df[price_col]) or not pd.api.types.is_numeric_dtype(df[sold_col]):
-    st.error("Selected columns must be numeric.")
+    st.error("Detected columns must be numeric.")
     st.stop()
+
 
 # ======================================================
 # DATA AUGMENTATION (IF DATA TOO SMALL)
