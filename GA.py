@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 st.title("🎬 Optimizing Cinema Ticket Pricing Using Genetic Algorithm")
-st.write("This app finds the **optimal cinema ticket price** that maximizes **revenue** using a Genetic Algorithm.")
+st.write("This app finds the optimal cinema ticket price that maximizes revenue using a Genetic Algorithm.")
 
 # ======================================================
 # FILE UPLOAD
@@ -28,7 +28,7 @@ if uploaded_file is None:
     st.stop()
 
 # ======================================================
-# LOAD DATA (ROBUST)
+# LOAD DATA
 # ======================================================
 try:
     df = pd.read_csv(uploaded_file)
@@ -38,7 +38,7 @@ except Exception:
     df = pd.read_csv(uploaded_file, engine="python", on_bad_lines="skip")
 
 st.success("Dataset loaded successfully ✅")
-st.dataframe(df.head())
+st.dataframe(df)
 
 # ======================================================
 # COLUMN SELECTION
@@ -46,17 +46,46 @@ st.dataframe(df.head())
 st.subheader("📌 Select Columns")
 
 columns = df.columns.tolist()
-
 price_col = st.selectbox("Ticket Price Column", columns)
 sold_col = st.selectbox("Tickets Sold Column", columns)
 
 if price_col == sold_col:
-    st.error("Price and Tickets Sold columns must be different.")
+    st.error("Columns must be different.")
     st.stop()
 
 if not pd.api.types.is_numeric_dtype(df[price_col]) or not pd.api.types.is_numeric_dtype(df[sold_col]):
     st.error("Selected columns must be numeric.")
     st.stop()
+
+# ======================================================
+# DATA AUGMENTATION (IF DATA TOO SMALL)
+# ======================================================
+st.subheader("🧪 Data Augmentation")
+
+if len(df) < 5:
+    st.warning("Dataset too small. Automatically generating additional data based on existing trend.")
+
+    price_min = df[price_col].min()
+    price_max = df[price_col].max()
+
+    # Generate new prices
+    new_prices = np.linspace(price_min, price_max, 10)
+
+    # Estimate demand using linear interpolation
+    new_demand = np.interp(
+        new_prices,
+        df[price_col],
+        df[sold_col]
+    )
+
+    augmented_df = pd.DataFrame({
+        price_col: new_prices,
+        sold_col: new_demand.astype(int)
+    })
+
+    df = augmented_df
+    st.success("Data successfully expanded ✅")
+    st.dataframe(df)
 
 # ======================================================
 # PRICE RANGE
@@ -72,7 +101,7 @@ def estimate_demand(price):
     return df.loc[idx, sold_col]
 
 # ======================================================
-# FITNESS FUNCTION (REVENUE)
+# FITNESS FUNCTION
 # ======================================================
 def fitness(price):
     return price * estimate_demand(price)
@@ -118,11 +147,9 @@ if st.button("🚀 Run Genetic Algorithm"):
     best_revenues = []
 
     progress = st.progress(0.0)
-    status = st.empty()
 
     for gen in range(GENERATIONS):
         population = sorted(population, key=fitness, reverse=True)
-
         new_population = population[:ELITISM_SIZE]
 
         while len(new_population) < POP_SIZE:
@@ -133,39 +160,24 @@ if st.button("🚀 Run Genetic Algorithm"):
             new_population.append(child)
 
         population = new_population
-
         best_price = population[0]
-        best_rev = fitness(best_price)
-
         best_prices.append(best_price)
-        best_revenues.append(best_rev)
-
+        best_revenues.append(fitness(best_price))
         progress.progress((gen + 1) / GENERATIONS)
-        if gen % 10 == 0:
-            status.text(
-                f"Generation {gen} | Price RM {best_price:.2f} | Revenue RM {best_rev:.2f}"
-            )
 
     # ======================================================
-    # FINAL RESULT
+    # RESULT
     # ======================================================
     st.subheader("🏆 Optimization Result")
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Optimal Ticket Price", f"RM {best_price:.2f}")
-    col2.metric("Estimated Tickets Sold", int(estimate_demand(best_price)))
-    col3.metric("Maximum Revenue", f"RM {best_rev:.2f}")
+    st.metric("Optimal Ticket Price", f"RM {best_price:.2f}")
+    st.metric("Estimated Tickets Sold", int(estimate_demand(best_price)))
+    st.metric("Maximum Revenue", f"RM {fitness(best_price):.2f}")
 
-    # ======================================================
-    # VISUALIZATION (STREAMLIT BUILT-IN)
-    # ======================================================
     st.subheader("📈 Optimization Progress")
+    st.line_chart(pd.DataFrame({
+        "Revenue": best_revenues,
+        "Ticket Price": best_prices
+    }))
 
-    chart_df = pd.DataFrame({
-        "Best Revenue (RM)": best_revenues,
-        "Ticket Price (RM)": best_prices
-    })
-
-    st.line_chart(chart_df)
-
-    st.success("🎉 Genetic Algorithm optimization completed!")
+    st.success("🎉 Optimization completed successfully!")
