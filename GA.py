@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import random
+from scipy.interpolate import interp1d
 
 # ======================================================
 # PAGE CONFIG
@@ -88,23 +89,19 @@ PRICE_MIN = float(df[price_col].min())
 PRICE_MAX = float(df[price_col].max())
 
 # ======================================================
-# DEMAND ESTIMATION
+# INTERPOLATE DEMAND FOR FAST FITNESS
 # ======================================================
-def estimate_demand(price):
-    # pastikan price dalam range dataframe
-    price = np.clip(price, df[price_col].min(), df[price_col].max())
-    idx = (df[price_col] - price).abs().idxmin()
-    return float(df.loc[idx, sold_col])
+demand_interp = interp1d(df[price_col], df[sold_col], kind='linear', fill_value="extrapolate")
 
-# ======================================================
-# FITNESS FUNCTION
-# ======================================================
+def estimate_demand(price):
+    price = np.clip(price, PRICE_MIN, PRICE_MAX)
+    return float(demand_interp(price))
+
 def fitness(price):
     demand = estimate_demand(price)
     if objective_type.startswith("Single"):
         return price * demand
     else:
-        # Weighted sum: maximize revenue & penalize very high price
         revenue = price * demand
         price_penalty = 0.1 * price
         return revenue - price_penalty
@@ -130,26 +127,22 @@ def mutation(price):
 # ======================================================
 if st.button("🚀 Run Genetic Algorithm"):
 
+    # Initialize
     population = init_population()
     best_history = []
 
+    # GA LOOP
     for gen in range(GENERATIONS):
-        # Sort population by fitness
         population = sorted(population, key=fitness, reverse=True)
         new_pop = population[:ELITISM_SIZE]
-
-        # Generate new children
         while len(new_pop) < POP_SIZE:
-            p1 = selection(population)
-            p2 = selection(population)
-            child = mutation(crossover(p1, p2))
-            new_pop.append(child)
-
+            p1, p2 = selection(population), selection(population)
+            new_pop.append(mutation(crossover(p1, p2)))
         population = new_pop
         best_history.append(population[0])
 
     # ======================================================
-    # SHOW SELECTED OBJECTIVE
+    # SHOW OBJECTIVE
     # ======================================================
     st.markdown("## 🎯 GA Objective")
     if objective_type.startswith("Single"):
@@ -164,7 +157,7 @@ if st.button("🚀 Run Genetic Algorithm"):
     top_solutions = population[:3]
 
     results_df = pd.DataFrame({
-        "Rank": [1, 2, 3],
+        "Rank": [1,2,3],
         "Ticket Price (RM)": [round(p,2) for p in top_solutions],
         "Estimated Demand": [int(estimate_demand(p)) for p in top_solutions],
         "Fitness Value (Revenue)": [round(fitness(p),2) for p in top_solutions]
@@ -173,7 +166,7 @@ if st.button("🚀 Run Genetic Algorithm"):
     best_price = top_solutions[0]
 
     # ======================================================
-    # BEST SOLUTION METRICS
+    # BEST METRICS
     # ======================================================
     st.markdown("## 🏆 Best Solution")
     col1, col2, col3 = st.columns(3)
@@ -194,12 +187,12 @@ if st.button("🚀 Run Genetic Algorithm"):
     price_range = np.linspace(PRICE_MIN, PRICE_MAX, 50)
     revenue_curve = [fitness(p) for p in price_range]
 
-    # Highlight best solution
     revenue_df = pd.DataFrame({
         "Ticket Price": price_range,
         "Revenue": revenue_curve
     })
-    chart = st.line_chart(revenue_df.set_index("Ticket Price"))
+
+    st.line_chart(revenue_df.set_index("Ticket Price"))
     st.success(f"🔴 Maximum revenue occurs at RM {best_price:.2f}")
 
     # ======================================================
@@ -218,7 +211,7 @@ if st.button("🚀 Run Genetic Algorithm"):
     st.markdown("## 🧠 Interpretation")
     st.write(
         f"""
-        • The GA selects the ticket price with the **highest fitness value**.  
+        • GA selects the ticket price with the **highest fitness value**.  
         • Top 3 solutions show how fitness varies with price.  
         • Learning curve indicates convergence over generations.  
         • Selected objective: **{objective_type}**.  
