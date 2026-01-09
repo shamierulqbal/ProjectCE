@@ -15,7 +15,7 @@ st.set_page_config(
 st.title("🎬 Cinema Ticket Pricing Optimization Using Genetic Algorithm (GA)")
 st.write(
     """
-    This app uses a **Genetic Algorithm (GA)** to identify the **optimal cinema ticket price**.
+    This application applies a **Genetic Algorithm (GA)** to determine the optimal cinema ticket price.
     You can select **Single Objective** (maximize revenue) or **Multi-Objective** (maximize revenue + balance price/demand).
     """
 )
@@ -54,7 +54,7 @@ if price_col is None or sold_col is None:
     st.error("Unable to auto-detect price or demand column.")
     st.stop()
 
-# Force numeric
+# Force numeric and drop NA
 df[price_col] = pd.to_numeric(df[price_col], errors="coerce")
 df[sold_col] = pd.to_numeric(df[sold_col], errors="coerce")
 df = df[[price_col, sold_col]].dropna()
@@ -77,9 +77,9 @@ objective_type = st.sidebar.selectbox(
 )
 
 if objective_type.startswith("Single"):
-    st.sidebar.info("✅ Single objective: maximize revenue only")
+    st.sidebar.info("✅ Single Objective: maximize revenue only")
 else:
-    st.sidebar.info("✅ Multi-objective: balance revenue and price")
+    st.sidebar.info("✅ Multi-Objective: balance revenue and price")
 
 # ======================================================
 # PRICE RANGE
@@ -102,7 +102,6 @@ def fitness(price):
     if objective_type.startswith("Single"):
         return price * demand
     else:
-        # Weighted sum: maximize revenue, penalize very high prices
         revenue = price * demand
         price_penalty = 0.1 * price  # weight adjustable
         return revenue - price_penalty
@@ -143,6 +142,15 @@ if st.button("🚀 Run Genetic Algorithm"):
 
         population = new_pop
         best_history.append(population[0])
+
+    # ======================================================
+    # SHOW SELECTED OBJECTIVE
+    # ======================================================
+    st.markdown("## 🎯 GA Objective")
+    if objective_type.startswith("Single"):
+        st.success("✅ Single Objective: Maximize Revenue only")
+    else:
+        st.success("✅ Multi-Objective: Balance Revenue & Price (Weighted Sum)")
 
     # ======================================================
     # TOP 3 SOLUTIONS
@@ -205,9 +213,10 @@ if st.button("🚀 Run Genetic Algorithm"):
     st.markdown("## 🧠 Interpretation")
     st.write(
         f"""
-        • The GA selects the ticket price with the **highest fitness value**.
-        • Top 3 solutions show how fitness varies with price.
-        • Learning curve indicates convergence over generations.
+        • The GA selects the ticket price with the **highest fitness value**.  
+        • Top 3 solutions show how fitness varies with price.  
+        • Learning curve indicates convergence over generations.  
+        • Selected objective: **{objective_type}**.  
         • Multi-objective GA balances revenue with price to avoid very high ticket prices.
         """
     )
