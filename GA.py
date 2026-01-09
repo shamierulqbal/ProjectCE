@@ -8,22 +8,21 @@ import random
 # ======================================================
 st.set_page_config(
     page_title="Cinema Ticket Pricing Optimization (GA)",
-    page_icon="🎬",
     layout="wide"
 )
 
-st.title("🎬 Cinema Ticket Pricing Optimization Using Genetic Algorithm (GA)")
+st.title("Cinema Ticket Pricing Optimization Using Genetic Algorithm")
 st.write(
     """
-    This application applies a **Genetic Algorithm (GA)** to determine the optimal cinema ticket price.
-    You can select **Single Objective** (maximize revenue) or **Multi-Objective** (maximize revenue + balance price/demand).
+    This application applies a Genetic Algorithm (GA) to determine the optimal cinema ticket price.
+    You can select Single Objective (maximize revenue) or Multi-Objective (maximize revenue + balance price/demand).
     """
 )
 
 # ======================================================
 # FILE UPLOAD
 # ======================================================
-uploaded_file = st.file_uploader("📂 Upload cinema ticket dataset (CSV)", type=["csv"])
+uploaded_file = st.file_uploader("Upload cinema ticket dataset (CSV)", type=["csv"])
 if uploaded_file is None:
     st.info("Please upload a CSV file to proceed.")
     st.stop()
@@ -63,13 +62,13 @@ if len(df) == 0:
     st.error("Dataset has no valid numeric data.")
     st.stop()
 
-st.success(f"🎫 Price Column: {price_col} | 👥 Demand Column: {sold_col}")
+st.success(f"Price Column: {price_col} | Demand Column: {sold_col}")
 st.dataframe(df)
 
 # ======================================================
 # SIDEBAR: GA PARAMETERS & OBJECTIVE
 # ======================================================
-st.sidebar.header("⚙️ GA Parameters")
+st.sidebar.header("GA Parameters")
 POP_SIZE = st.sidebar.slider("Population Size", 20, 200, 60)
 GENERATIONS = st.sidebar.slider("Generations", 50, 300, 150)
 CROSSOVER_RATE = st.sidebar.slider("Crossover Rate", 0.0, 1.0, 0.8)
@@ -102,7 +101,6 @@ def fitness(price):
     if objective_type.startswith("Single"):
         return price * demand
     else:
-        # Weighted sum: maximize revenue & penalize high price
         revenue = price * demand
         price_penalty = 0.1 * price
         return revenue - price_penalty
@@ -126,7 +124,7 @@ def mutation(price):
 # ======================================================
 # RUN GA
 # ======================================================
-if st.button("🚀 Run Genetic Algorithm"):
+if st.button("Run Genetic Algorithm"):
 
     population = init_population()
     best_history = []
@@ -143,11 +141,11 @@ if st.button("🚀 Run Genetic Algorithm"):
     # ======================================================
     # SHOW OBJECTIVE
     # ======================================================
-    st.markdown("## 🎯 GA Objective")
+    st.markdown("GA Objective")
     if objective_type.startswith("Single"):
-        st.success("✅ Single Objective: Maximize Revenue only")
+        st.success("Single Objective: Maximize Revenue only")
     else:
-        st.success("✅ Multi-Objective: Balance Revenue & Price (Weighted Sum)")
+        st.success("Multi-Objective: Balance Revenue & Price (Weighted Sum)")
 
     # ======================================================
     # TOP 3 SOLUTIONS
@@ -157,9 +155,9 @@ if st.button("🚀 Run Genetic Algorithm"):
 
     results_df = pd.DataFrame({
         "Rank": [1,2,3],
-        "Ticket Price (RM)": [round(p,2) for p in top_solutions],
+        "Ticket Price": [round(p,2) for p in top_solutions],
         "Estimated Demand": [int(estimate_demand(p)) for p in top_solutions],
-        "Fitness Value (Revenue)": [round(fitness(p),2) for p in top_solutions]
+        "Fitness Value": [round(fitness(p),2) for p in top_solutions]
     })
 
     best_price = top_solutions[0]
@@ -167,22 +165,22 @@ if st.button("🚀 Run Genetic Algorithm"):
     # ======================================================
     # BEST METRICS
     # ======================================================
-    st.markdown("## 🏆 Best Solution")
+    st.markdown("Best Solution")
     col1, col2, col3 = st.columns(3)
-    col1.metric("🎫 Best Ticket Price", f"RM {best_price:.2f}")
-    col2.metric("👥 Estimated Demand", int(estimate_demand(best_price)))
-    col3.metric("💰 Fitness Value (Revenue)", f"RM {fitness(best_price):.2f}")
+    col1.metric("Best Ticket Price", f"RM {best_price:.2f}")
+    col2.metric("Estimated Demand", int(estimate_demand(best_price)))
+    col3.metric("Fitness Value", f"RM {fitness(best_price):.2f}")
 
     # ======================================================
     # TOP 3 TABLE
     # ======================================================
-    st.markdown("## 🥇 Top 3 GA Solutions")
+    st.markdown("Top 3 GA Solutions")
     st.dataframe(results_df, use_container_width=True)
 
     # ======================================================
     # PRICE vs REVENUE CURVE
     # ======================================================
-    st.markdown("## 📈 Ticket Price vs Revenue")
+    st.markdown("Ticket Price vs Revenue")
     price_range = np.linspace(PRICE_MIN, PRICE_MAX, 50)
     revenue_curve = [fitness(p) for p in price_range]
 
@@ -192,12 +190,12 @@ if st.button("🚀 Run Genetic Algorithm"):
     })
 
     st.line_chart(revenue_df.set_index("Ticket Price"))
-    st.success(f"🔴 Maximum revenue occurs at RM {best_price:.2f}")
+    st.success(f"Maximum revenue occurs at RM {best_price:.2f}")
 
     # ======================================================
     # GA LEARNING CURVE
     # ======================================================
-    st.markdown("## 🧬 Genetic Algorithm Learning Curve")
+    st.markdown("Genetic Algorithm Learning Curve")
     learning_df = pd.DataFrame({
         "Generation": range(1, GENERATIONS+1),
         "Best Fitness": [fitness(p) for p in best_history]
@@ -207,13 +205,13 @@ if st.button("🚀 Run Genetic Algorithm"):
     # ======================================================
     # INTERPRETATION
     # ======================================================
-    st.markdown("## 🧠 Interpretation")
+    st.markdown("Interpretation")
     st.write(
         f"""
-        • GA selects the ticket price with the **highest fitness value**.  
+        • GA selects the ticket price with the highest fitness value.  
         • Top 3 solutions show how fitness varies with price.  
         • Learning curve indicates convergence over generations.  
-        • Selected objective: **{objective_type}**.  
+        • Selected objective: {objective_type}.  
         • Multi-objective GA balances revenue with price to avoid very high ticket prices.
         """
     )
