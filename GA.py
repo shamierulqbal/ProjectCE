@@ -32,8 +32,6 @@ if uploaded_file is None:
 # LOAD DATA
 # ======================================================
 df = pd.read_csv(uploaded_file)
-st.success("Dataset loaded successfully ✅")
-st.dataframe(df)
 
 # ======================================================
 # AUTO COLUMN DETECTION
@@ -54,12 +52,19 @@ if price_col is None or sold_col is None:
     st.error("Unable to auto-detect price or demand column.")
     st.stop()
 
-# Force numeric and drop NA
+# ======================================================
+# CLEAN DATA
+# ======================================================
 df[price_col] = pd.to_numeric(df[price_col], errors="coerce")
 df[sold_col] = pd.to_numeric(df[sold_col], errors="coerce")
-df = df[[price_col, sold_col]].dropna()
+df = df[[price_col, sold_col]].dropna().reset_index(drop=True)
+
+if len(df) == 0:
+    st.error("Dataset has no valid numeric data.")
+    st.stop()
 
 st.success(f"🎫 Price Column: {price_col} | 👥 Demand Column: {sold_col}")
+st.dataframe(df)
 
 # ======================================================
 # SIDEBAR: GA PARAMETERS & OBJECTIVE
@@ -76,11 +81,6 @@ objective_type = st.sidebar.selectbox(
     ["Single Objective (Maximize Revenue)", "Multi-Objective (Revenue & Price Balance)"]
 )
 
-if objective_type.startswith("Single"):
-    st.sidebar.info("✅ Single Objective: maximize revenue only")
-else:
-    st.sidebar.info("✅ Multi-Objective: balance revenue and price")
-
 # ======================================================
 # PRICE RANGE
 # ======================================================
@@ -91,6 +91,8 @@ PRICE_MAX = float(df[price_col].max())
 # DEMAND ESTIMATION
 # ======================================================
 def estimate_demand(price):
+    # pastikan price dalam range dataframe
+    price = np.clip(price, df[price_col].min(), df[price_col].max())
     idx = (df[price_col] - price).abs().idxmin()
     return float(df.loc[idx, sold_col])
 
@@ -102,8 +104,9 @@ def fitness(price):
     if objective_type.startswith("Single"):
         return price * demand
     else:
+        # Weighted sum: maximize revenue & penalize very high price
         revenue = price * demand
-        price_penalty = 0.1 * price  # weight adjustable
+        price_penalty = 0.1 * price
         return revenue - price_penalty
 
 # ======================================================
@@ -113,7 +116,7 @@ def init_population():
     return [random.uniform(PRICE_MIN, PRICE_MAX) for _ in range(POP_SIZE)]
 
 def selection(pop):
-    candidates = random.sample(pop, 3)
+    candidates = random.sample(pop, min(3, len(pop)))
     return max(candidates, key=fitness)
 
 def crossover(p1, p2):
@@ -131,9 +134,11 @@ if st.button("🚀 Run Genetic Algorithm"):
     best_history = []
 
     for gen in range(GENERATIONS):
+        # Sort population by fitness
         population = sorted(population, key=fitness, reverse=True)
         new_pop = population[:ELITISM_SIZE]
 
+        # Generate new children
         while len(new_pop) < POP_SIZE:
             p1 = selection(population)
             p2 = selection(population)
@@ -168,7 +173,7 @@ if st.button("🚀 Run Genetic Algorithm"):
     best_price = top_solutions[0]
 
     # ======================================================
-    # RESULT SUMMARY
+    # BEST SOLUTION METRICS
     # ======================================================
     st.markdown("## 🏆 Best Solution")
     col1, col2, col3 = st.columns(3)
@@ -189,12 +194,12 @@ if st.button("🚀 Run Genetic Algorithm"):
     price_range = np.linspace(PRICE_MIN, PRICE_MAX, 50)
     revenue_curve = [fitness(p) for p in price_range]
 
+    # Highlight best solution
     revenue_df = pd.DataFrame({
         "Ticket Price": price_range,
         "Revenue": revenue_curve
     })
-
-    st.line_chart(revenue_df.set_index("Ticket Price"))
+    chart = st.line_chart(revenue_df.set_index("Ticket Price"))
     st.success(f"🔴 Maximum revenue occurs at RM {best_price:.2f}")
 
     # ======================================================
