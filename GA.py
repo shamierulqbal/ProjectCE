@@ -15,7 +15,7 @@ st.title("Cinema Ticket Pricing Optimization Using Genetic Algorithm")
 st.write(
     """
     This application applies a Genetic Algorithm (GA) to determine the optimal cinema ticket price.
-    You can select Single Objective (maximize revenue) or Multi-Objective (maximize revenue + balance price/demand).
+    Choose between maximizing pure revenue or balancing revenue with customer demand.
     """
 )
 
@@ -24,7 +24,7 @@ st.write(
 # ======================================================
 uploaded_file = st.file_uploader("Upload cinema ticket dataset (CSV)", type=["csv"])
 if uploaded_file is None:
-    st.info("Please upload a CSV file to proceed.")
+    st.info("Please upload a CSV file to proceed. Ensure it contains 'Price' and 'Demand/Sold' columns.")
     st.stop()
 
 # ======================================================
@@ -36,7 +36,7 @@ df = pd.read_csv(uploaded_file)
 # AUTO COLUMN DETECTION
 # ======================================================
 price_keywords = ["price", "ticket"]
-demand_keywords = ["person", "sold", "demand", "quantity"]
+demand_keywords = ["person", "sold", "demand", "quantity", "attendance"]
 
 def find_column(keywords):
     for col in df.columns:
@@ -48,7 +48,7 @@ price_col = find_column(price_keywords)
 sold_col = find_column(demand_keywords)
 
 if price_col is None or sold_col is None:
-    st.error("Unable to auto-detect price or demand column.")
+    st.error("Unable to auto-detect price or demand column. Please rename your CSV columns.")
     st.stop()
 
 # ======================================================
@@ -56,39 +56,47 @@ if price_col is None or sold_col is None:
 # ======================================================
 df[price_col] = pd.to_numeric(df[price_col], errors="coerce")
 df[sold_col] = pd.to_numeric(df[sold_col], errors="coerce")
-df = df[[price_col, sold_col]].dropna().reset_index(drop=True)
+df = df[[price_col, sold_col]].dropna().sort_values(by=price_col).reset_index(drop=True)
 
 if len(df) == 0:
     st.error("Dataset has no valid numeric data.")
     st.stop()
 
-st.success(f"Price Column: {price_col} | Demand Column: {sold_col}")
-st.dataframe(df)
+st.success(f"Detected Price Column: **{price_col}** | Demand Column: **{sold_col}**")
+st.dataframe(df.head())
 
 # ======================================================
 # SIDEBAR: GA PARAMETERS & OBJECTIVE
 # ======================================================
 st.sidebar.header("GA Parameters")
-POP_SIZE = st.sidebar.slider("Population Size", 20, 200, 60)
-GENERATIONS = st.sidebar.slider("Generations", 50, 300, 150)
+POP_SIZE = st.sidebar.slider("Population Size", 20, 200, 100)
+GENERATIONS = st.sidebar.slider("Generations", 50, 500, 200)
 CROSSOVER_RATE = st.sidebar.slider("Crossover Rate", 0.0, 1.0, 0.8)
-MUTATION_RATE = st.sidebar.slider("Mutation Rate", 0.0, 1.0, 0.05)
-ELITISM_SIZE = st.sidebar.slider("Elitism Size", 1, 5, 2)
+MUTATION_RATE = st.sidebar.slider("Mutation Rate", 0.0, 1.0, 0.1)
+ELITISM_SIZE = st.sidebar.slider("Elitism Size", 1, 10, 2)
 
+st.sidebar.markdown("---")
 objective_type = st.sidebar.selectbox(
     "Select GA Objective",
-    ["Single Objective (Maximize Revenue)", "Multi-Objective (Revenue & Price Balance)"]
+    ["Single Objective (Maximize Revenue)", "Multi-Objective (Revenue & Demand Balance)"]
 )
 
+# Initialize weights
+w1, w2 = 1.0, 0.0
+if "Multi-Objective" in objective_type:
+    st.sidebar.subheader("Multi-Objective Weights")
+    w1 = st.sidebar.slider("w1 (Revenue Weight)", 0.0, 1.0, 0.7)
+    w2 = st.sidebar.slider("w2 (Demand Weight)", 0.0, 1.0, 0.3)
+    
+    if round(w1 + w2, 2) != 1.0:
+        st.sidebar.warning(f"Weights sum to {round(w1+w2,2)}. (Ideal: 1.0)")
+
 # ======================================================
-# PRICE RANGE
+# PRICE RANGE & INTERPOLATION
 # ======================================================
 PRICE_MIN = float(df[price_col].min())
 PRICE_MAX = float(df[price_col].max())
 
-# ======================================================
-# NUMPY INTERPOLATION FOR FAST DEMAND
-# ======================================================
 price_arr = df[price_col].values
 demand_arr = df[sold_col].values
 
@@ -98,12 +106,13 @@ def estimate_demand(price):
 
 def fitness(price):
     demand = estimate_demand(price)
+    revenue = price * demand
+    
     if objective_type.startswith("Single"):
-        return price * demand
+        return revenue
     else:
-        revenue = price * demand
-        price_penalty = 0.1 * price
-        return revenue - price_penalty
+        # Multi-Objective: (w1 * Revenue) + (w2 * Demand)
+        return (w1 * revenue) + (w2 * demand)
 
 # ======================================================
 # GA OPERATORS
@@ -119,99 +128,95 @@ def crossover(p1, p2):
     return (p1 + p2)/2 if random.random() < CROSSOVER_RATE else p1
 
 def mutation(price):
-    return random.uniform(PRICE_MIN, PRICE_MAX) if random.random() < MUTATION_RATE else price
+    if random.random() < MUTATION_RATE:
+        # Small mutation range around current price
+        return np.clip(price + random.uniform(-2, 2), PRICE_MIN, PRICE_MAX)
+    return price
 
 # ======================================================
 # RUN GA
 # ======================================================
 if st.button("Run Genetic Algorithm"):
-
     population = init_population()
     best_history = []
+    
+    progress_bar = st.progress(0)
 
     for gen in range(GENERATIONS):
+        # Sort by fitness (Descending)
         population = sorted(population, key=fitness, reverse=True)
-        new_pop = population[:ELITISM_SIZE]
-        while len(new_pop) < POP_SIZE:
-            p1, p2 = selection(population), selection(population)
-            new_pop.append(mutation(crossover(p1, p2)))
-        population = new_pop
+        
+        # Keep track of best individual
         best_history.append(population[0])
+        
+        # Create new population using Elitism
+        new_pop = population[:ELITISM_SIZE]
+        
+        while len(new_pop) < POP_SIZE:
+            p1 = selection(population)
+            p2 = selection(population)
+            child = crossover(p1, p2)
+            child = mutation(child)
+            new_pop.append(child)
+            
+        population = new_pop
+        
+        # Update progress
+        progress_bar.progress((gen + 1) / GENERATIONS)
 
     # ======================================================
-    # SHOW OBJECTIVE
+    # FINAL RESULTS
     # ======================================================
-    st.markdown("GA Objective")
-    if objective_type.startswith("Single"):
-        st.success("Single Objective: Maximize Revenue only")
-    else:
-        st.success("Multi-Objective: Balance Revenue & Price (Weighted Sum)")
+    best_price = sorted(population, key=fitness, reverse=True)[0]
+    final_demand = estimate_demand(best_price)
+    final_revenue = best_price * final_demand
 
-    # ======================================================
-    # TOP 3 SOLUTIONS
-    # ======================================================
-    population = sorted(population, key=fitness, reverse=True)
-    top_solutions = population[:3]
-
-    results_df = pd.DataFrame({
-        "Rank": [1,2,3],
-        "Ticket Price": [round(p,2) for p in top_solutions],
-        "Estimated Demand": [int(estimate_demand(p)) for p in top_solutions],
-        "Fitness Value": [round(fitness(p),2) for p in top_solutions]
-    })
-
-    best_price = top_solutions[0]
-
-    # ======================================================
-    # BEST METRICS
-    # ======================================================
-    st.markdown("Best Solution")
+    st.markdown("### Optimization Results")
     col1, col2, col3 = st.columns(3)
-    col1.metric("Best Ticket Price", f"RM {best_price:.2f}")
-    col2.metric("Estimated Demand", int(estimate_demand(best_price)))
-    col3.metric("Fitness Value", f"RM {fitness(best_price):.2f}")
+    col1.metric("Optimal Ticket Price", f"RM {best_price:.2f}")
+    col2.metric("Estimated Attendance", f"{int(final_demand)} pax")
+    col3.metric("Total Revenue", f"RM {final_revenue:,.2f}")
 
     # ======================================================
-    # TOP 3 TABLE
+    # CHARTS
     # ======================================================
-    st.markdown("Top 3 GA Solutions")
-    st.dataframe(results_df, use_container_width=True)
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.markdown("**Price vs. Fitness Curve**")
+        p_plot = np.linspace(PRICE_MIN, PRICE_MAX, 100)
+        f_plot = [fitness(p) for p in p_plot]
+        chart_data = pd.DataFrame({"Price": p_plot, "Fitness Score": f_plot})
+        st.line_chart(chart_data.set_index("Price"))
+
+    with c2:
+        st.markdown("**GA Learning Curve (Convergence)**")
+        learning_data = pd.DataFrame({
+            "Generation": range(len(best_history)),
+            "Best Fitness": [fitness(p) for p in best_history]
+        })
+        st.line_chart(learning_data.set_index("Generation"))
 
     # ======================================================
-    # PRICE vs REVENUE CURVE
+    # TOP SOLUTIONS TABLE
     # ======================================================
-    st.markdown("Ticket Price vs Revenue")
-    price_range = np.linspace(PRICE_MIN, PRICE_MAX, 50)
-    revenue_curve = [fitness(p) for p in price_range]
-
-    revenue_df = pd.DataFrame({
-        "Ticket Price": price_range,
-        "Revenue": revenue_curve
+    st.markdown("### Top 5 Candidate Solutions")
+    top_5 = sorted(list(set(population)), key=fitness, reverse=True)[:5]
+    top_df = pd.DataFrame({
+        "Rank": range(1, len(top_5) + 1),
+        "Ticket Price (RM)": [round(p, 2) for p in top_5],
+        "Est. Demand": [int(estimate_demand(p)) for p in top_5],
+        "Est. Revenue (RM)": [round(p * estimate_demand(p), 2) for p in top_5],
+        "Total Fitness": [round(fitness(p), 2) for p in top_5]
     })
-
-    st.line_chart(revenue_df.set_index("Ticket Price"))
-    st.success(f"Maximum revenue occurs at RM {best_price:.2f}")
+    st.table(top_df)
 
     # ======================================================
-    # GA LEARNING CURVE
+    # STRATEGY SUMMARY
     # ======================================================
-    st.markdown("Genetic Algorithm Learning Curve")
-    learning_df = pd.DataFrame({
-        "Generation": range(1, GENERATIONS+1),
-        "Best Fitness": [fitness(p) for p in best_history]
-    })
-    st.line_chart(learning_df.set_index("Generation"))
-
-    # ======================================================
-    # INTERPRETATION
-    # ======================================================
-    st.markdown("Interpretation")
-    st.write(
-        f"""
-        • GA selects the ticket price with the highest fitness value.  
-        • Top 3 solutions show how fitness varies with price.  
-        • Learning curve indicates convergence over generations.  
-        • Selected objective: {objective_type}.  
-        • Multi-objective GA balances revenue with price to avoid very high ticket prices.
-        """
-    )
+    st.info(f"""
+    **Analysis Summary:**
+    - **Objective:** {objective_type}
+    - **Weighting:** Revenue ($w_1$) = {w1}, Demand ($w_2$) = {w2}
+    - The Genetic Algorithm suggests a price of **RM {best_price:.2f}** to achieve the best balance between profit and occupancy.
+    """)
