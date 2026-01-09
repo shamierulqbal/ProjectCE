@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import random
+import matplotlib.pyplot as plt
 
 # ======================================================
 # PAGE CONFIG
@@ -12,11 +13,11 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🎬 Optimizing Cinema Ticket Pricing Using Genetic Algorithm")
+st.title("🎬 Cinema Ticket Price Optimization using Genetic Algorithm")
 st.write(
     """
-    This application uses a **Genetic Algorithm (GA)** to identify the **optimal cinema ticket price**
-    that maximizes total revenue based on historical demand data.
+    This application applies a **Genetic Algorithm (GA)** to determine the
+    optimal cinema ticket price that maximizes revenue based on historical demand data.
     """
 )
 
@@ -37,18 +38,16 @@ if uploaded_file is None:
 # ======================================================
 try:
     df = pd.read_csv(uploaded_file)
-except UnicodeDecodeError:
+except:
     df = pd.read_csv(uploaded_file, encoding="latin1")
-except Exception:
-    df = pd.read_csv(uploaded_file, engine="python", on_bad_lines="skip")
 
 st.success("Dataset loaded successfully ✅")
 st.dataframe(df)
 
 # ======================================================
-# COLUMN SELECTION (AUTO-DETECT & RESTRICTED)
+# AUTO-DETECT REQUIRED COLUMNS
 # ======================================================
-st.subheader("📌 Ticket Price & Demand Columns (Auto Detected)")
+st.subheader("📌 Auto-detected Columns")
 
 price_keywords = ["price", "ticket"]
 demand_keywords = ["person", "sold", "demand", "quantity"]
@@ -63,23 +62,19 @@ price_col = find_column(price_keywords)
 sold_col = find_column(demand_keywords)
 
 if price_col is None or sold_col is None:
-    st.error("❌ Unable to detect required columns (ticket price / number of persons).")
+    st.error("❌ Cannot detect ticket price or number of persons column.")
     st.stop()
 
-if not pd.api.types.is_numeric_dtype(df[price_col]) or not pd.api.types.is_numeric_dtype(df[sold_col]):
-    st.error("Detected columns must be numeric.")
-    st.stop()
-
-st.success(f"🎫 Ticket Price Column: **{price_col}**")
-st.success(f"👥 Number of Person Column: **{sold_col}**")
+st.success(f"🎫 Ticket Price Column: {price_col}")
+st.success(f"👥 Number of Persons Column: {sold_col}")
 
 # ======================================================
-# DATA AUGMENTATION (IF DATA TOO SMALL)
+# DATA PREPARATION
 # ======================================================
 st.subheader("🧪 Data Preparation")
 
 if len(df) < 5:
-    st.warning("Dataset too small. Generating additional synthetic data for GA stability.")
+    st.warning("Dataset too small. Generating synthetic data.")
 
     price_min = df[price_col].min()
     price_max = df[price_col].max()
@@ -92,31 +87,22 @@ if len(df) < 5:
         sold_col: new_demand.astype(int)
     })
 
-    st.success("Data successfully expanded ✅")
+    st.success("Data augmented successfully.")
     st.dataframe(df)
 
 # ======================================================
-# PRICE RANGE
+# GA SETTINGS
 # ======================================================
 PRICE_MIN = float(df[price_col].min())
 PRICE_MAX = float(df[price_col].max())
 
-# ======================================================
-# DEMAND ESTIMATION
-# ======================================================
 def estimate_demand(price):
     idx = (df[price_col] - price).abs().idxmin()
     return df.loc[idx, sold_col]
 
-# ======================================================
-# FITNESS FUNCTION (REVENUE)
-# ======================================================
 def fitness(price):
     return price * estimate_demand(price)
 
-# ======================================================
-# GA PARAMETERS
-# ======================================================
 st.sidebar.header("⚙️ Genetic Algorithm Parameters")
 
 POP_SIZE = st.sidebar.slider("Population Size", 20, 200, 60)
@@ -172,66 +158,66 @@ if st.button("🚀 Run Genetic Algorithm"):
 
         best_prices.append(best_price)
         best_revenues.append(fitness(best_price))
-
         progress.progress((gen + 1) / GENERATIONS)
 
     # ======================================================
-    # RESULT DASHBOARD
+    # RESULTS
     # ======================================================
-    st.markdown("## 🏆 Optimization Result Summary")
+    st.markdown("## 🏆 Optimization Results")
 
     col1, col2, col3 = st.columns(3)
-
-    col1.metric("🎫 Optimal Ticket Price", f"RM {best_price:.2f}")
-    col2.metric("👥 Estimated Tickets Sold", int(estimate_demand(best_price)))
-    col3.metric("💰 Maximum Revenue", f"RM {fitness(best_price):.2f}")
-
-    # ======================================================
-    # REAL DATA VISUALIZATION
-    # ======================================================
-    st.markdown("## 📊 Ticket Price vs Demand (Real Data)")
-
-    plot_df = df.copy()
-    plot_df["Revenue"] = plot_df[price_col] * plot_df[sold_col]
-
-    st.scatter_chart(plot_df, x=price_col, y=sold_col)
-
-    st.info(
-        f"🔴 **Optimal price identified by GA: RM {best_price:.2f}**"
-    )
+    col1.metric("Optimal Ticket Price", f"RM {best_price:.2f}")
+    col2.metric("Estimated Tickets Sold", int(estimate_demand(best_price)))
+    col3.metric("Maximum Revenue", f"RM {fitness(best_price):.2f}")
 
     # ======================================================
-    # GA CONVERGENCE
+    # PLOT 1: PRICE vs DEMAND
     # ======================================================
-    st.markdown("## 📈 Genetic Algorithm Learning Curve")
+    st.markdown("## 📊 Ticket Price vs Number of Persons")
 
-    conv_df = pd.DataFrame({
-        "Generation": range(1, GENERATIONS + 1),
-        "Best Revenue": best_revenues,
-        "Best Price": best_prices
-    })
+    fig1, ax1 = plt.subplots()
+    ax1.scatter(df[price_col], df[sold_col])
+    ax1.axvline(best_price, linestyle="--", label="Optimal Price")
 
-    st.line_chart(conv_df.set_index("Generation")[["Best Revenue"]])
+    ax1.set_xlabel("Ticket Price (RM)")
+    ax1.set_ylabel("Number of Persons")
+    ax1.set_title("Relationship Between Ticket Price and Demand")
+    ax1.legend()
+
+    st.pyplot(fig1)
 
     # ======================================================
-    # DECISION INSIGHT
+    # PLOT 2: PRICE vs REVENUE
     # ======================================================
-    st.markdown("## 🧠 Optimization Insight")
+    st.markdown("## 💰 Ticket Price vs Revenue")
 
-    avg_price = df[price_col].mean()
-    price_relation = "higher" if best_price > avg_price else "lower"
+    price_range = np.linspace(PRICE_MIN, PRICE_MAX, 100)
+    revenue_curve = [p * estimate_demand(p) for p in price_range]
 
-    st.success(
-        f"""
-        📌 **Key Insight**  
-        The Genetic Algorithm suggests setting the ticket price **{price_relation} than the average historical price**
-        to achieve maximum revenue.
+    fig2, ax2 = plt.subplots()
+    ax2.plot(price_range, revenue_curve)
+    ax2.axvline(best_price, linestyle="--", label="Optimal Price")
+    ax2.scatter(best_price, fitness(best_price))
 
-        💡 Although higher prices may reduce demand, the **increase in price per ticket compensates for the loss in volume**,
-        resulting in higher overall revenue.
+    ax2.set_xlabel("Ticket Price (RM)")
+    ax2.set_ylabel("Revenue (RM)")
+    ax2.set_title("Revenue Optimization Curve")
+    ax2.legend()
 
-        🧬 This demonstrates GA's ability to effectively balance the **price–demand trade-off** using evolutionary optimization.
-        """
-    )
+    st.pyplot(fig2)
 
-    st.balloons()
+    # ======================================================
+    # PLOT 3: GA LEARNING CURVE
+    # ======================================================
+    st.markdown("## 🧬 Genetic Algorithm Learning Curve")
+
+    fig3, ax3 = plt.subplots()
+    ax3.plot(range(1, GENERATIONS + 1), best_revenues)
+
+    ax3.set_xlabel("Generation")
+    ax3.set_ylabel("Best Revenue (RM)")
+    ax3.set_title("GA Convergence Curve")
+
+    st.pyplot(fig3)
+
+    st.success("🎉 Genetic Algorithm optimization completed successfully!")
