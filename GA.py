@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import random
-from scipy.interpolate import interp1d
 
 # ======================================================
 # PAGE CONFIG
@@ -89,19 +88,21 @@ PRICE_MIN = float(df[price_col].min())
 PRICE_MAX = float(df[price_col].max())
 
 # ======================================================
-# INTERPOLATE DEMAND FOR FAST FITNESS
+# NUMPY INTERPOLATION FOR FAST DEMAND
 # ======================================================
-demand_interp = interp1d(df[price_col], df[sold_col], kind='linear', fill_value="extrapolate")
+price_arr = df[price_col].values
+demand_arr = df[sold_col].values
 
 def estimate_demand(price):
     price = np.clip(price, PRICE_MIN, PRICE_MAX)
-    return float(demand_interp(price))
+    return float(np.interp(price, price_arr, demand_arr))
 
 def fitness(price):
     demand = estimate_demand(price)
     if objective_type.startswith("Single"):
         return price * demand
     else:
+        # Weighted sum: maximize revenue & penalize high price
         revenue = price * demand
         price_penalty = 0.1 * price
         return revenue - price_penalty
@@ -127,11 +128,9 @@ def mutation(price):
 # ======================================================
 if st.button("🚀 Run Genetic Algorithm"):
 
-    # Initialize
     population = init_population()
     best_history = []
 
-    # GA LOOP
     for gen in range(GENERATIONS):
         population = sorted(population, key=fitness, reverse=True)
         new_pop = population[:ELITISM_SIZE]
