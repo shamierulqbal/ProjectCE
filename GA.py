@@ -13,8 +13,8 @@ st.set_page_config(
 
 st.title("Cinema Ticket Pricing Optimization Using Genetic Algorithm")
 st.write("""
-This application applies a Genetic Algorithm (GA) to optimize cinema ticket pricing
-based on customer demand and revenue performance.
+This application applies a Genetic Algorithm (GA) to determine the optimal cinema ticket price
+by maximizing revenue and balancing customer demand.
 """)
 
 # ======================================================
@@ -32,10 +32,10 @@ if uploaded_file is None:
 df = pd.read_csv(uploaded_file)
 
 # ======================================================
-# COLUMN DETECTION
+# AUTO COLUMN DETECTION
 # ======================================================
 price_keywords = ["price", "ticket"]
-demand_keywords = ["sold", "demand", "attendance", "quantity", "person", "number"]
+demand_keywords = ["person", "sold", "demand", "quantity", "attendance", "number"]
 
 def find_column(keywords):
     for col in df.columns:
@@ -129,19 +129,14 @@ if st.button("Run Genetic Algorithm"):
 
     population = init_population()
 
-    best_history = []
     best_fitness_history = []
     avg_fitness_history = []
 
     for gen in range(GENERATIONS):
 
-        # evaluate population
         fitness_values = [fitness_func(p) for p in population]
 
-        # store best & average fitness
-        best_idx = np.argmax(fitness_values)
-        best_history.append(population[best_idx])
-        best_fitness_history.append(fitness_values[best_idx])
+        best_fitness_history.append(max(fitness_values))
         avg_fitness_history.append(np.mean(fitness_values))
 
         # elitism
@@ -154,7 +149,6 @@ if st.button("Run Genetic Algorithm"):
 
         new_population = population_sorted[:ELITISM_SIZE]
 
-        # generate new population
         while len(new_population) < POP_SIZE:
             p1 = selection(population_sorted, fitness_func)
             p2 = selection(population_sorted, fitness_func)
@@ -165,7 +159,7 @@ if st.button("Run Genetic Algorithm"):
         population = new_population
 
     # ======================================================
-    # FINAL RESULT
+    # FINAL RESULTS
     # ======================================================
     best_price = max(population, key=fitness_func)
     best_demand = estimate_demand(best_price)
@@ -179,48 +173,13 @@ if st.button("Run Genetic Algorithm"):
     c3.metric("Total Revenue", f"RM {best_revenue:,.2f}")
 
     # ======================================================
-    # INTERPRETATION
+    # GA LEARNING CURVE
     # ======================================================
-    if "Single" in objective_type:
-        st.markdown("### 🔍 Interpretation (Single Objective)")
-        st.write(
-            "The Genetic Algorithm identifies the optimal ticket price that maximizes "
-            "total revenue by effectively balancing ticket price and customer demand."
-        )
-    else:
-        st.markdown("### 🔍 Interpretation (Multi Objective)")
-        st.write(
-            "The Genetic Algorithm optimizes cinema ticket pricing by maximizing total "
-            "revenue while balancing ticket price and customer demand using evolutionary "
-            "optimization."
-        )
+    st.markdown("## GA Learning Curve")
 
-    # ======================================================
-    # VISUALIZATION
-    # ======================================================
-    st.markdown("## GA Performance Analysis")
-
-    col1, col2 = st.columns(2)
-
-    # Price vs Fitness Curve
-    with col1:
-        st.markdown("**Price vs Fitness Curve**")
-        prices = np.linspace(PRICE_MIN, PRICE_MAX, 100)
-        fitness_values = [fitness_func(p) for p in prices]
-
-        st.line_chart(pd.DataFrame({
-            "Price": prices,
-            "Fitness": fitness_values
-        }).set_index("Price"))
-
-    # GA Learning Curve (Best & Average)
-    with col2:
-        st.markdown("**GA Learning Curve (Best vs Average Fitness)**")
-
-        st.line_chart(pd.DataFrame({
-            "Best Fitness": best_fitness_history,
-            "Average Fitness": avg_fitness_history
-        }))
+    st.line_chart(pd.DataFrame({
+        "Best Fitness": best_fitness_history,
+        "Average Fitness": avg_fitness_history
+    }))
 
     st.success("Genetic Algorithm Optimization Completed Successfully 🎉")
-
