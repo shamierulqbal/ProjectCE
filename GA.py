@@ -128,16 +128,38 @@ if st.button("Run Genetic Algorithm"):
     fitness_func = fitness_single if "Single" in objective_type else fitness_multi
 
     population = init_population()
+
     best_history = []
+    best_fitness_history = []
+    avg_fitness_history = []
 
-    for _ in range(GENERATIONS):
-        population = sorted(population, key=fitness_func, reverse=True)
-        best_history.append(population[0])
+    for gen in range(GENERATIONS):
 
-        new_population = population[:ELITISM_SIZE]
+        # evaluate population
+        fitness_values = [fitness_func(p) for p in population]
+
+        # store best & average fitness
+        best_idx = np.argmax(fitness_values)
+        best_history.append(population[best_idx])
+        best_fitness_history.append(fitness_values[best_idx])
+        avg_fitness_history.append(np.mean(fitness_values))
+
+        # elitism
+        population_sorted = [
+            p for _, p in sorted(
+                zip(fitness_values, population),
+                reverse=True
+            )
+        ]
+
+        new_population = population_sorted[:ELITISM_SIZE]
+
+        # generate new population
         while len(new_population) < POP_SIZE:
-            p1, p2 = selection(population, fitness_func), selection(population, fitness_func)
-            child = mutation(crossover(p1, p2))
+            p1 = selection(population_sorted, fitness_func)
+            p2 = selection(population_sorted, fitness_func)
+            child = crossover(p1, p2)
+            child = mutation(child)
             new_population.append(child)
 
         population = new_population
@@ -157,35 +179,48 @@ if st.button("Run Genetic Algorithm"):
     c3.metric("Total Revenue", f"RM {best_revenue:,.2f}")
 
     # ======================================================
-    # LOGICAL EXPLANATION OUTPUT
+    # INTERPRETATION
     # ======================================================
     if "Single" in objective_type:
         st.markdown("### 🔍 Interpretation (Single Objective)")
         st.write(
-            f"""
-            The Genetic Algorithm aims to **maximize total revenue** by evaluating different ticket prices.
-            The optimal ticket price of **RM {best_price:.2f}** achieves the highest revenue by balancing
-            ticket price and customer demand.
-
-            Although lower prices attract more customers and higher prices increase ticket value,
-            this price point provides the **maximum revenue of RM {best_revenue:,.2f}**
-            with an estimated demand of **{int(best_demand)} customers**.
-            """
+            "The Genetic Algorithm identifies the optimal ticket price that maximizes "
+            "total revenue by effectively balancing ticket price and customer demand."
         )
-
     else:
         st.markdown("### 🔍 Interpretation (Multi Objective)")
         st.write(
-            f"""
-            The multi-objective Genetic Algorithm optimizes cinema ticket pricing by **maximizing total revenue
-            while balancing ticket price and customer demand using evolutionary optimization**.
-
-            The selected ticket price of **RM {best_price:.2f}** represents a trade-off solution that maintains
-            healthy customer attendance (**{int(best_demand)} customers**) while achieving a strong revenue
-            performance of **RM {best_revenue:,.2f}**.
-
-            This solution is suitable for cinemas aiming for **long-term sustainability rather than short-term profit maximization**.
-            """
+            "The Genetic Algorithm optimizes cinema ticket pricing by maximizing total "
+            "revenue while balancing ticket price and customer demand using evolutionary "
+            "optimization."
         )
 
+    # ======================================================
+    # VISUALIZATION
+    # ======================================================
+    st.markdown("## GA Performance Analysis")
+
+    col1, col2 = st.columns(2)
+
+    # Price vs Fitness Curve
+    with col1:
+        st.markdown("**Price vs Fitness Curve**")
+        prices = np.linspace(PRICE_MIN, PRICE_MAX, 100)
+        fitness_values = [fitness_func(p) for p in prices]
+
+        st.line_chart(pd.DataFrame({
+            "Price": prices,
+            "Fitness": fitness_values
+        }).set_index("Price"))
+
+    # GA Learning Curve (Best & Average)
+    with col2:
+        st.markdown("**GA Learning Curve (Best vs Average Fitness)**")
+
+        st.line_chart(pd.DataFrame({
+            "Best Fitness": best_fitness_history,
+            "Average Fitness": avg_fitness_history
+        }))
+
     st.success("Genetic Algorithm Optimization Completed Successfully 🎉")
+
