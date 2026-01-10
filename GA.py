@@ -13,12 +13,12 @@ st.set_page_config(
 
 st.title("Cinema Ticket Pricing Optimization Using Genetic Algorithm")
 st.write("""
-This application applies a Genetic Algorithm (GA) to determine the optimal cinema
-ticket price based on customer demand.
+This application applies a Genetic Algorithm (GA) to optimize cinema ticket pricing
+based on customer demand and revenue performance.
 """)
 
 # ======================================================
-# FILE UPLOAD (ONLY CSV)
+# FILE UPLOAD
 # ======================================================
 uploaded_file = st.file_uploader(
     "Upload cinema ticket dataset (CSV)",
@@ -32,7 +32,7 @@ if uploaded_file is None:
 df = pd.read_csv(uploaded_file)
 
 # ======================================================
-# AUTO COLUMN DETECTION
+# COLUMN DETECTION
 # ======================================================
 price_keywords = ["price", "ticket"]
 demand_keywords = ["sold", "demand", "attendance", "quantity", "person", "number"]
@@ -47,12 +47,7 @@ price_col = find_column(price_keywords)
 demand_col = find_column(demand_keywords)
 
 if price_col is None or demand_col is None:
-    st.error(
-        "Price or Demand column not detected.\n\n"
-        "Expected column names similar to:\n"
-        "- ticket_price\n"
-        "- number_person"
-    )
+    st.error("Price or Demand column not detected.")
     st.stop()
 
 # ======================================================
@@ -62,36 +57,28 @@ df[price_col] = pd.to_numeric(df[price_col], errors="coerce")
 df[demand_col] = pd.to_numeric(df[demand_col], errors="coerce")
 df = df[[price_col, demand_col]].dropna().sort_values(by=price_col).reset_index(drop=True)
 
-if len(df) < 5:
-    st.error("Dataset too small. Please upload a dataset with more records.")
-    st.stop()
-
-st.success(f"Detected columns → Price: **{price_col}**, Demand: **{demand_col}**")
-st.markdown("### Dataset Preview")
+st.success(f"Detected columns → Price: {price_col}, Demand: {demand_col}")
 st.dataframe(df.head(10))
 
 # ======================================================
-# SIDEBAR – GA PARAMETERS ONLY
+# SIDEBAR – GA PARAMETERS
 # ======================================================
 st.sidebar.header("Genetic Algorithm Parameters")
 
-POP_SIZE = st.sidebar.slider("Population Size", 20, 200, 100)
-GENERATIONS = st.sidebar.slider("Number of Generations", 50, 500, 200)
+POP_SIZE = st.sidebar.slider("Population Size", 30, 200, 100)
+GENERATIONS = st.sidebar.slider("Generations", 50, 500, 200)
 CROSSOVER_RATE = st.sidebar.slider("Crossover Rate", 0.0, 1.0, 0.8)
 MUTATION_RATE = st.sidebar.slider("Mutation Rate", 0.0, 1.0, 0.1)
 ELITISM_SIZE = st.sidebar.slider("Elitism Size", 1, 10, 2)
 
-st.sidebar.markdown("---")
-
 objective_type = st.sidebar.selectbox(
-    "Objective Function",
+    "Optimization Objective",
     ["Single Objective (Maximize Revenue)",
-     "Multi Objective (Revenue + Demand)"]
+     "Multi Objective (Revenue + Demand Balance)"]
 )
 
 w1, w2 = 1.0, 0.0
 if "Multi" in objective_type:
-    st.sidebar.subheader("Objective Weights")
     w1 = st.sidebar.slider("Revenue Weight (w1)", 0.0, 1.0, 0.7)
     w2 = st.sidebar.slider("Demand Weight (w2)", 0.0, 1.0, 0.3)
 
@@ -105,12 +92,14 @@ price_arr = df[price_col].values
 demand_arr = df[demand_col].values
 
 def estimate_demand(price):
-    price = np.clip(price, PRICE_MIN, PRICE_MAX)
-    return float(np.interp(price, price_arr, demand_arr))
+    return float(np.interp(
+        np.clip(price, PRICE_MIN, PRICE_MAX),
+        price_arr,
+        demand_arr
+    ))
 
 def fitness_single(price):
-    demand = estimate_demand(price)
-    return price * demand
+    return price * estimate_demand(price)
 
 def fitness_multi(price):
     demand = estimate_demand(price)
@@ -141,59 +130,62 @@ if st.button("Run Genetic Algorithm"):
     population = init_population()
     best_history = []
 
-    progress_bar = st.progress(0)
-
-    for gen in range(GENERATIONS):
+    for _ in range(GENERATIONS):
         population = sorted(population, key=fitness_func, reverse=True)
         best_history.append(population[0])
 
         new_population = population[:ELITISM_SIZE]
-
         while len(new_population) < POP_SIZE:
-            p1 = selection(population, fitness_func)
-            p2 = selection(population, fitness_func)
-            child = crossover(p1, p2)
-            child = mutation(child)
+            p1, p2 = selection(population, fitness_func), selection(population, fitness_func)
+            child = mutation(crossover(p1, p2))
             new_population.append(child)
 
         population = new_population
-        progress_bar.progress((gen + 1) / GENERATIONS)
 
     # ======================================================
-    # RESULTS
+    # FINAL RESULT
     # ======================================================
     best_price = max(population, key=fitness_func)
     best_demand = estimate_demand(best_price)
     best_revenue = best_price * best_demand
 
     st.markdown("## Optimization Results")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Optimal Ticket Price", f"RM {best_price:.2f}")
-    col2.metric("Estimated Demand", f"{int(best_demand)} people")
-    col3.metric("Total Revenue", f"RM {best_revenue:,.2f}")
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Optimal Ticket Price", f"RM {best_price:.2f}")
+    c2.metric("Estimated Demand", f"{int(best_demand)} customers")
+    c3.metric("Total Revenue", f"RM {best_revenue:,.2f}")
 
     # ======================================================
-    # VISUALIZATION
+    # LOGICAL EXPLANATION OUTPUT
     # ======================================================
-    c1, c2 = st.columns(2)
+    if "Single" in objective_type:
+        st.markdown("### 🔍 Interpretation (Single Objective)")
+        st.write(
+            f"""
+            The Genetic Algorithm aims to **maximize total revenue** by evaluating different ticket prices.
+            The optimal ticket price of **RM {best_price:.2f}** achieves the highest revenue by balancing
+            ticket price and customer demand.
 
-    with c1:
-        st.markdown("**Price vs Fitness Curve**")
-        prices = np.linspace(PRICE_MIN, PRICE_MAX, 100)
-        fitness_values = [fitness_func(p) for p in prices]
+            Although lower prices attract more customers and higher prices increase ticket value,
+            this price point provides the **maximum revenue of RM {best_revenue:,.2f}**
+            with an estimated demand of **{int(best_demand)} customers**.
+            """
+        )
 
-        st.line_chart(pd.DataFrame({
-            "Price": prices,
-            "Fitness": fitness_values
-        }).set_index("Price"))
+    else:
+        st.markdown("### 🔍 Interpretation (Multi Objective)")
+        st.write(
+            f"""
+            The multi-objective Genetic Algorithm optimizes cinema ticket pricing by **maximizing total revenue
+            while balancing ticket price and customer demand using evolutionary optimization**.
 
-    with c2:
-        st.markdown("**GA Convergence Curve**")
-        best_fitness = [fitness_func(p) for p in best_history]
+            The selected ticket price of **RM {best_price:.2f}** represents a trade-off solution that maintains
+            healthy customer attendance (**{int(best_demand)} customers**) while achieving a strong revenue
+            performance of **RM {best_revenue:,.2f}**.
 
-        st.line_chart(pd.DataFrame({
-            "Generation": range(1, len(best_fitness) + 1),
-            "Best Fitness": best_fitness
-        }).set_index("Generation"))
+            This solution is suitable for cinemas aiming for **long-term sustainability rather than short-term profit maximization**.
+            """
+        )
 
     st.success("Genetic Algorithm Optimization Completed Successfully 🎉")
