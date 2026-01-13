@@ -3,6 +3,10 @@ import pandas as pd
 import numpy as np
 import random
 
+# Set random seeds for reproducibility
+random.seed(42)
+np.random.seed(42)
+
 # ======================================================
 # PAGE CONFIG
 # ======================================================
@@ -182,4 +186,4 @@ if st.button("Run Genetic Algorithm"):
         "Average Fitness": avg_fitness_history
     }))
 
-    st.success("Genetic Algorithm Optimization Completed Successfully 🎉")
+    st.success("Genetic Algorithm Optimization Completed Successfully ")
