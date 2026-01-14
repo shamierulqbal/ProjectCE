@@ -3,22 +3,18 @@ import pandas as pd
 import numpy as np
 import random
 
-# =========================
 # RANDOM SEED
-# =========================
 SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
 
-# =========================
 # PAGE CONFIG
-# =========================
 st.set_page_config(page_title="Cinema Ticket Pricing Optimization (GA)", layout="wide")
 st.title("Cinema Ticket Pricing Optimization Using Genetic Algorithm")
 
-# =========================
+
 # FILE UPLOAD
-# =========================
+
 uploaded_file = st.file_uploader("Upload cinema ticket dataset (CSV)", type=["csv"])
 if uploaded_file is None:
     st.info("Please upload a CSV file.")
@@ -46,9 +42,8 @@ df = df[[price_col,demand_col]].dropna().sort_values(by=price_col).reset_index(d
 PRICE_MIN, PRICE_MAX = df[price_col].min(), df[price_col].max()
 price_arr, demand_arr = df[price_col].values, df[demand_col].values
 
-# =========================
+
 # SIDEBAR GA PARAMETERS
-# =========================
 POP_SIZE = st.sidebar.slider("Population Size", 30, 200, 100)
 GENERATIONS = st.sidebar.slider("Generations", 50, 500, 200)
 CROSSOVER_RATE = st.sidebar.slider("Crossover Rate", 0.0, 1.0, 0.8)
@@ -61,9 +56,8 @@ if "Multi" in objective_type:
     w1 = st.sidebar.slider("Revenue Weight (w1)", 0.0, 1.0, 0.7)
     w2 = st.sidebar.slider("Demand Weight (w2)", 0.0, 1.0, 0.3)
 
-# =========================
+
 # GA SUPPORT FUNCTIONS
-# =========================
 def estimate_demand(price):
     return float(np.interp(np.clip(price, PRICE_MIN, PRICE_MAX), price_arr, demand_arr))
 
@@ -89,9 +83,7 @@ def mutation(price):
         price += random.uniform(-2,2)
     return np.clip(price, PRICE_MIN, PRICE_MAX)
 
-# =========================
 # RUN GA
-# =========================
 if st.button("Run Genetic Algorithm"):
     fitness_func = fitness_single if "Single" in objective_type else fitness_multi
     population = init_population()
